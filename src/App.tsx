@@ -8,6 +8,11 @@ import Index from "./pages/Index";
 import AdminDashboard from "./pages/AdminDashboard";
 import HRDashboard from "./pages/HRDashboard";
 import EmployeeDashboard from "./pages/EmployeeDashboard";
+import EmployeeManagement from "./pages/EmployeeManagement";
+import LeaveManagement from "./pages/LeaveManagement";
+import Attendance from "./pages/Attendance";
+import Performance from "./pages/Performance";
+import Documents from "./pages/Documents";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -23,6 +28,11 @@ const App = () => (
           <Route path="/admin-dashboard" element={<AdminDashboard />} />
           <Route path="/hr-dashboard" element={<HRDashboard />} />
           <Route path="/employee-dashboard" element={<EmployeeDashboard />} />
+          <Route path="/employee-management" element={<EmployeeManagement />} />
+          <Route path="/leave-management" element={<LeaveManagement />} />
+          <Route path="/attendance" element={<Attendance />} />
+          <Route path="/performance" element={<Performance />} />
+          <Route path="/documents" element={<Documents />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
