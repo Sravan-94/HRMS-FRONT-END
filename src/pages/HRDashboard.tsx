@@ -18,12 +18,12 @@ import {
 const HRDashboard = () => {
   const sidebarItems = [
     { icon: LayoutDashboard, label: 'Dashboard', path: '/hr-dashboard', active: true },
-    { icon: Users, label: 'Employee Management', path: '/hr/employees' },
-    { icon: Calendar, label: 'Leave Management', path: '/hr/leave' },
-    { icon: Clock, label: 'Attendance', path: '/hr/attendance' },
-    { icon: TrendingUp, label: 'Performance', path: '/hr/performance' },
-    { icon: FileText, label: 'Documents', path: '/hr/documents' },
-    { icon: ClipboardList, label: 'Recruitment', path: '/hr/recruitment' },
+    { icon: Users, label: 'Employee Management', path: '/employee-management' },
+    { icon: Calendar, label: 'Leave Management', path: '/leave-management' },
+    { icon: Clock, label: 'Attendance', path: '/attendance' },
+    { icon: TrendingUp, label: 'Performance', path: '/performance' },
+    { icon: FileText, label: 'Documents', path: '/documents' },
+    { icon: ClipboardList, label: 'Recruitment', path: '/recruitment' },
   ];
 
   return (

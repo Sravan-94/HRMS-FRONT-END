@@ -20,10 +20,10 @@ const AdminDashboard = () => {
   const sidebarItems = [
     { icon: LayoutDashboard, label: 'Dashboard', path: '/admin-dashboard', active: true },
     { icon: Users, label: 'Employee Management', path: '/admin/employees' },
-    { icon: Calendar, label: 'Leave Management', path: '/admin/leave' },
-    { icon: Clock, label: 'Attendance', path: '/admin/attendance' },
-    { icon: TrendingUp, label: 'Performance', path: '/admin/performance' },
-    { icon: FileText, label: 'Documents', path: '/admin/documents' },
+    { icon: Calendar, label: 'Leave Management', path: '/leave-management' },
+    { icon: Clock, label: 'Attendance', path: '/attendance' },
+    { icon: TrendingUp, label: 'Performance', path: '/performance' },
+    { icon: FileText, label: 'Documents', path: '/documents' },
     { icon: DollarSign, label: 'Payroll', path: '/admin/payroll' },
     { icon: Settings, label: 'Settings', path: '/admin/settings' },
   ];
