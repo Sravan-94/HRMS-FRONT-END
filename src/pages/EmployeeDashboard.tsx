@@ -1,4 +1,3 @@
-
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -14,15 +13,34 @@ import {
   Target,
   Award
 } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 
 const EmployeeDashboard = () => {
   const sidebarItems = [
     { icon: LayoutDashboard, label: 'Dashboard', path: '/employee-dashboard', active: true },
-    { icon: Calendar, label: 'Leave Management', path: '/employee/leave' },
-    { icon: Clock, label: 'Attendance', path: '/employee/attendance' },
+    { icon: Calendar, label: 'Leaves Management', path: '/employee-leaves' },
+    { icon: Clock, label: 'Your Attendance', path: '/employee-attendance' },
     { icon: TrendingUp, label: 'Performance', path: '/employee/performance' },
     { icon: FileText, label: 'Documents', path: '/employee/documents' },
     { icon: User, label: 'Profile', path: '/employee/profile' },
+  ];
+
+  // Mock data for recent leaves (limited for dashboard view)
+  const recentLeaves = [
+    { 
+      id: 3, 
+      type: 'Casual Leave',
+      startDate: '2024-04-01',
+      endDate: '2024-04-05',
+      status: 'Pending',
+    },
+    { 
+      id: 2, 
+      type: 'Sick Leave',
+      startDate: '2024-02-20',
+      endDate: '2024-02-21',
+      status: 'Approved',
+    },
   ];
 
   return (
@@ -95,7 +113,7 @@ const EmployeeDashboard = () => {
           </Card>
         </div>
 
-        {/* Quick Actions */}
+        {/* Quick Actions
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -119,37 +137,37 @@ const EmployeeDashboard = () => {
               </Button>
             </div>
           </CardContent>
-        </Card>
+        </Card> */}
 
-        {/* Performance & Attendance */}
+        {/* Recent Leaves & Recent Activities */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Recent Leaves */}
           <Card>
             <CardHeader>
-              <CardTitle>Performance Goals</CardTitle>
+              <CardTitle>Recent Leave Requests</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                <div>
-                  <div className="flex justify-between mb-2">
-                    <span className="text-sm font-medium">Q4 Sales Target</span>
-                    <span className="text-sm text-muted-foreground">85%</span>
-                  </div>
-                  <Progress value={85} className="h-2" />
-                </div>
-                <div>
-                  <div className="flex justify-between mb-2">
-                    <span className="text-sm font-medium">Project Completion</span>
-                    <span className="text-sm text-muted-foreground">92%</span>
-                  </div>
-                  <Progress value={92} className="h-2" />
-                </div>
-                <div>
-                  <div className="flex justify-between mb-2">
-                    <span className="text-sm font-medium">Skill Development</span>
-                    <span className="text-sm text-muted-foreground">67%</span>
-                  </div>
-                  <Progress value={67} className="h-2" />
-                </div>
+                {recentLeaves.length > 0 ? (
+                  recentLeaves.map(leave => (
+                    <div key={leave.id} className="flex items-center justify-between p-3 border rounded-md shadow-sm">
+                      <div>
+                        <h3 className="text-sm font-medium">{leave.type}</h3>
+                        <p className="text-xs text-gray-500">{leave.startDate} to {leave.endDate}</p>
+                      </div>
+                      <Badge 
+                        variant={
+                          leave.status === 'Approved' ? 'default' :
+                          leave.status === 'Pending' ? 'secondary' : 'destructive'
+                        }
+                      >
+                        {leave.status}
+                      </Badge>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-center text-gray-500">No recent leave requests.</p>
+                )}
               </div>
             </CardContent>
           </Card>

@@ -14,7 +14,8 @@ import Attendance from "./pages/Attendance";
 import Performance from "./pages/Performance";
 import Documents from "./pages/Documents";
 import NotFound from "./pages/NotFound";
-
+import Employeeattendance from "./pages/Employeeattendance";
+import Employeeleave from "./pages/Employeeleave";
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -33,6 +34,8 @@ const App = () => (
           <Route path="/attendance" element={<Attendance />} />
           <Route path="/performance" element={<Performance />} />
           <Route path="/documents" element={<Documents />} />
+          <Route path="/employee-attendance" element={<Employeeattendance />} />
+          <Route path="/employee-leaves" element={<Employeeleave />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
