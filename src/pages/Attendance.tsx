@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -54,7 +53,9 @@ const Attendance = () => {
       checkIn: '09:00 AM', 
       checkOut: '06:00 PM', 
       hours: '9h 0m', 
-      status: 'Present' 
+      status: 'Present',
+      loginImage: 'Logo-removebg-preview.png',
+      logoutImage: 'Logo-removebg-preview.png',
     },
     { 
       id: 2, 
@@ -63,7 +64,9 @@ const Attendance = () => {
       checkIn: '08:45 AM', 
       checkOut: '05:30 PM', 
       hours: '8h 45m', 
-      status: 'Present' 
+      status: 'Present',
+      loginImage: 'Logo-removebg-preview.png',
+      logoutImage: '',
     },
     { 
       id: 3, 
@@ -72,7 +75,9 @@ const Attendance = () => {
       checkIn: '09:15 AM', 
       checkOut: '06:15 PM', 
       hours: '9h 0m', 
-      status: 'Late' 
+      status: 'Late',
+      loginImage: '',
+      logoutImage: 'Logo-removebg-preview.png',
     },
     { 
       id: 4, 
@@ -81,7 +86,9 @@ const Attendance = () => {
       checkIn: '-', 
       checkOut: '-', 
       hours: '-', 
-      status: 'Absent' 
+      status: 'Absent',
+      loginImage: '',
+      logoutImage: '',
     },
   ];
 
@@ -104,11 +111,7 @@ const Attendance = () => {
   };
 
   return (
-    <DashboardLayout
-      sidebarItems={getSidebarItems()}
-      title="Attendance"
-      userRole={userRole.charAt(0).toUpperCase() + userRole.slice(1)}
-    >
+    <DashboardLayout>
       <div className="space-y-6">
         {/* Header Section */}
         <div className="flex justify-between items-center">
@@ -213,6 +216,39 @@ const Attendance = () => {
                       </span>
                     </Badge>
                   </div>
+                  {/* Login and Logout Selfies */}
+                  {(record.loginImage || record.logoutImage) && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                      <div>
+                        <p className="text-sm font-medium text-gray-600 mb-2">Login Selfie</p>
+                        {record.loginImage ? (
+                          <img
+                            src={record.loginImage}
+                            alt={`Login Selfie ${record.employee}`}
+                            className="w-16 h-16 mx-auto rounded-full object-cover shadow-md"
+                          />
+                        ) : (
+                          <div className="w-16 h-16 mx-auto rounded-full bg-gray-100 flex items-center justify-center text-gray-400">
+                            No Image
+                          </div>
+                        )}
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-gray-600 mb-2">Logout Selfie</p>
+                        {record.logoutImage ? (
+                          <img
+                            src={record.logoutImage}
+                            alt={`Logout Selfie ${record.employee}`}
+                            className="w-16 h-16 mx-auto rounded-full object-cover shadow-md"
+                          />
+                        ) : (
+                          <div className="w-16 h-16 mx-auto rounded-full bg-gray-100 flex items-center justify-center text-gray-400">
+                            No Image
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

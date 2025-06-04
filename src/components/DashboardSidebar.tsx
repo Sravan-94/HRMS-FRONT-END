@@ -1,5 +1,5 @@
 import { LucideIcon } from 'lucide-react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
   Users,
@@ -13,7 +13,9 @@ import {
   UserPlus,
   Building2,
   BarChart3,
+  LogOut
 } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 
 interface SidebarItem {
   icon: LucideIcon;
@@ -24,7 +26,24 @@ interface SidebarItem {
 
 const DashboardSidebar = () => {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { toast } = useToast();
   const userRole = localStorage.getItem('userRole') || 'employee';
+
+  const handleLogout = () => {
+    // Clear user data from localStorage
+    localStorage.removeItem('userRole');
+    localStorage.removeItem('userEmail');
+    
+    // Show success message
+    toast({
+      title: "Success",
+      description: "Logged out successfully!",
+    });
+
+    // Redirect to login page
+    navigate('/');
+  };
 
   const allSidebarItems: SidebarItem[] = [
     // Common items for all roles
@@ -74,37 +93,37 @@ const DashboardSidebar = () => {
       path: '/employee-management',
       roles: ['admin', 'hr']
     },
-    { 
-      icon: DollarSign, 
-      label: 'Payroll', 
-      path: '/payroll',
-      roles: ['admin']
-    },
-    { 
-      icon: Building2, 
-      label: 'Department Management', 
-      path: '/departments',
-      roles: ['admin']
-    },
-    { 
-      icon: BarChart3, 
-      label: 'Analytics', 
-      path: '/analytics',
-      roles: ['admin']
-    },
-    // HR specific items
-    { 
-      icon: ClipboardList, 
-      label: 'Recruitment', 
-      path: '/recruitment',
-      roles: ['admin', 'hr']
-    },
-    { 
-      icon: UserPlus, 
-      label: 'Onboarding', 
-      path: '/onboarding',
-      roles: ['admin', 'hr']
-    },
+    // { 
+    //   icon: DollarSign, 
+    //   label: 'Payroll', 
+    //   path: '/payroll',
+    //   roles: ['admin']
+    // },
+    // { 
+    //   icon: Building2, 
+    //   label: 'Department Management', 
+    //   path: '/departments',
+    //   roles: ['admin']
+    // },
+    // { 
+    //   icon: BarChart3, 
+    //   label: 'Analytics', 
+    //   path: '/analytics',
+    //   roles: ['admin']
+    // },
+    // // HR specific items
+    // { 
+    //   icon: ClipboardList, 
+    //   label: 'Recruitment', 
+    //   path: '/recruitment',
+    //   roles: ['admin', 'hr']
+    // },
+    // { 
+    //   icon: UserPlus, 
+    //   label: 'Onboarding', 
+    //   path: '/onboarding',
+    //   roles: ['admin', 'hr']
+    // },
     // Employee specific items
     { 
       icon: Users, 
@@ -113,12 +132,12 @@ const DashboardSidebar = () => {
       roles: ['employee']
     },
     // Settings for admin and HR
-    { 
-      icon: Settings, 
-      label: 'Settings', 
-      path: '/settings',
-      roles: ['admin', 'hr']
-    },
+    // { 
+    //   icon: Settings, 
+    //   label: 'Settings', 
+    //   path: '/settings',
+    //   roles: ['admin', 'hr']
+    // },
   ];
 
   // Filter items based on user role
@@ -138,12 +157,12 @@ const DashboardSidebar = () => {
   };
 
   return (
-    <div className="w-64 h-screen bg-white border-r border-gray-200 fixed left-0 top-0">
+    <div className="w-64 h-screen bg-white border-r border-gray-200 fixed left-0 top-0 flex flex-col">
       <div className="p-6">
         <h2 className="text-xl font-bold text-gray-800">{getPortalTitle()}</h2>
         <p className="text-sm text-gray-500 mt-1 capitalize">{userRole}</p>
       </div>
-      <nav className="mt-6">
+      <nav className="mt-6 flex-1">
         {sidebarItems.map((item) => {
           const isActive = location.pathname === item.path;
           return (
@@ -160,6 +179,15 @@ const DashboardSidebar = () => {
           );
         })}
       </nav>
+      <div className="p-4 border-t border-gray-200">
+        <button
+          onClick={handleLogout}
+          className="flex items-center w-full px-6 py-3 text-gray-700 hover:bg-gray-50 hover:text-red-600 transition-colors duration-200"
+        >
+          <LogOut className="h-5 w-5 mr-3" />
+          <span className="font-medium">Logout</span>
+        </button>
+      </div>
     </div>
   );
 };

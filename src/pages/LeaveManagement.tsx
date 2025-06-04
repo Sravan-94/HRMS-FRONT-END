@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -47,7 +46,7 @@ const LeaveManagement = () => {
     return baseItems;
   };
 
-  const leaveRequests = [
+  const [leaveRequests, setLeaveRequests] = useState([
     { 
       id: 1, 
       employee: 'John Doe', 
@@ -78,7 +77,7 @@ const LeaveManagement = () => {
       status: 'Rejected',
       reason: 'Personal matters'
     },
-  ];
+  ]);
 
   const canApproveLeaves = userRole === 'admin' || userRole === 'hr';
 
@@ -91,12 +90,20 @@ const LeaveManagement = () => {
     }
   };
 
+  const handleAccept = (id: number) => {
+    setLeaveRequests(leaveRequests.map(request =>
+      request.id === id ? { ...request, status: 'Approved' } : request
+    ));
+  };
+
+  const handleReject = (id: number) => {
+    setLeaveRequests(leaveRequests.map(request =>
+      request.id === id ? { ...request, status: 'Rejected' } : request
+    ));
+  };
+
   return (
-    <DashboardLayout
-      sidebarItems={getSidebarItems()}
-      title="Leave Management"
-      userRole={userRole.charAt(0).toUpperCase() + userRole.slice(1)}
-    >
+    <DashboardLayout>
       <div className="space-y-6">
         {/* Header Section */}
         <div className="flex justify-between items-center">
@@ -104,10 +111,6 @@ const LeaveManagement = () => {
             <h2 className="text-3xl font-bold text-gray-900">Leave Management</h2>
             <p className="text-gray-600">Manage employee leave requests and balances</p>
           </div>
-          <Button className="bg-blue-600 hover:bg-blue-700">
-            <Plus className="h-4 w-4 mr-2" />
-            Request Leave
-          </Button>
         </div>
 
         {/* Stats Cards */}
@@ -189,11 +192,11 @@ const LeaveManagement = () => {
                     </Badge>
                     {canApproveLeaves && request.status === 'Pending' && (
                       <div className="flex gap-2">
-                        <Button size="sm" className="bg-green-600 hover:bg-green-700">
-                          <Check className="h-4 w-4" />
+                        <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => handleAccept(request.id)}>
+                          Accept
                         </Button>
-                        <Button size="sm" variant="destructive">
-                          <X className="h-4 w-4" />
+                        <Button size="sm" variant="destructive" onClick={() => handleReject(request.id)}>
+                          Reject
                         </Button>
                       </div>
                     )}

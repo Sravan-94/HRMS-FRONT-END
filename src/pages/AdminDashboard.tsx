@@ -1,4 +1,3 @@
-
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import DashboardLayout from '@/components/DashboardLayout';
@@ -29,12 +28,20 @@ const AdminDashboard = () => {
   ];
 
   return (
-    <DashboardLayout
-      sidebarItems={sidebarItems}
-      title="Admin Dashboard"
-      userRole="Admin"
-    >
-      <div className="space-y-6">
+    <DashboardLayout>
+      {/* Welcome Section */}
+      <Card className="bg-gradient-to-r from-blue-600 to-blue-700 text-white">
+        <CardContent className="p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-2xl font-bold mb-2">Welcome to the Admin Dashboard!</h2>
+              <p className="text-blue-100">Manage your HRMS effectively</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="space-y-6 mt-6">
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <Card className="hover:shadow-lg transition-shadow">
@@ -81,32 +88,6 @@ const AdminDashboard = () => {
             </CardContent>
           </Card>
         </div>
-
-        {/* Quick Actions */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <ClipboardList className="h-5 w-5" />
-              Quick Actions
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <Button className="h-16 flex flex-col gap-2 bg-blue-600 hover:bg-blue-700">
-                <UserPlus className="h-5 w-5" />
-                Add New Employee
-              </Button>
-              <Button variant="outline" className="h-16 flex flex-col gap-2">
-                <Calendar className="h-5 w-5" />
-                Review Leave Requests
-              </Button>
-              <Button variant="outline" className="h-16 flex flex-col gap-2">
-                <TrendingUp className="h-5 w-5" />
-                Generate Reports
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
 
         {/* Recent Activities */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

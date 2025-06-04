@@ -20,6 +20,7 @@ interface AttendanceRecord {
   loginImage: string | null;
   logoutImage: string | null;
   duration: number; // Duration in seconds
+  email?: string; // Add email field to identify the user
 }
 
 // Helper function to format time in HH:MM:SS
@@ -67,15 +68,18 @@ const AttendancePage: React.FC = () => {
 
   const todayKey = dayjs().format('YYYY-MM-DD');
   const localStorageKey = 'attendanceHistory';
+  const userEmail = localStorage.getItem('userEmail'); // Get logged-in user's email
 
   useEffect(() => {
     const storedHistory = localStorage.getItem(localStorageKey);
     if (storedHistory) {
       const history: AttendanceRecord[] = JSON.parse(storedHistory);
-      setAttendanceHistory(history);
+      // Filter history by logged-in user's email
+      const userHistory = history.filter(record => record.email === userEmail);
+      setAttendanceHistory(userHistory);
 
-      // Find today's record to restore current login state if any
-      const todayRecord = history.find(record => record.date === todayKey);
+      // Find today's record for the current user to restore current login state if any
+      const todayRecord = userHistory.find(record => record.date === todayKey);
 
       if (todayRecord) {
         setCurrentDayRecord(todayRecord);
@@ -118,7 +122,7 @@ const AttendancePage: React.FC = () => {
       setLogoutTime(null);
       setCurrentDayRecord(null);
     }
-  }, []);
+  }, [userEmail]); // Add userEmail to dependency array
 
   useEffect(() => {
     let timer: NodeJS.Timeout;
@@ -144,7 +148,12 @@ const AttendancePage: React.FC = () => {
 
 
   const saveHistoryToStorage = (history: AttendanceRecord[]) => {
-    localStorage.setItem(localStorageKey, JSON.stringify(history));
+    // When saving, ensure we only save the current user's history by merging
+    // with other users' history if it exists in localStorage.
+    const allHistory = JSON.parse(localStorage.getItem(localStorageKey) || '[]') as AttendanceRecord[];
+    const otherUsersHistory = allHistory.filter(record => record.email !== userEmail);
+    const updatedAllHistory = [...otherUsersHistory, ...history];
+    localStorage.setItem(localStorageKey, JSON.stringify(updatedAllHistory));
   };
 
   const handleLogin = () => {
@@ -175,10 +184,11 @@ const AttendancePage: React.FC = () => {
         logoutTime: null,
         loginImage: imageSrc,
         logoutImage: null,
-        duration: 0
+        duration: 0,
+        email: userEmail // Store user email with the record
       };
 
-      // Add new record or replace if already exists for today
+      // Add new record or replace if already exists for today for this user
       const updatedHistory = attendanceHistory.filter(record => record.date !== todayKey);
       updatedHistory.push(newRecord);
       saveHistoryToStorage(updatedHistory);
@@ -199,7 +209,7 @@ const AttendancePage: React.FC = () => {
         calculatedDuration = logoutTimeObj.diff(loginTimeObj, 'second');
       }
 
-      // Update today's record in history
+      // Update today's record for the current user in history
       let updatedRecord: AttendanceRecord | null = null;
       const updatedHistory = attendanceHistory.map(record => {
         if (record.date === todayKey) {
@@ -235,10 +245,23 @@ const AttendancePage: React.FC = () => {
 
     setIsCameraOpen(false);
     setActionType(null);
+
+    // After capture (login or logout), re-load and filter history for the current user
+    const storedHistoryAfterCapture = localStorage.getItem(localStorageKey);
+    if (storedHistoryAfterCapture) {
+      const historyAfterCapture: AttendanceRecord[] = JSON.parse(storedHistoryAfterCapture);
+      const userHistoryAfterCapture = historyAfterCapture.filter(record => record.email === userEmail);
+      setAttendanceHistory(userHistoryAfterCapture);
+    }
   };
 
   // Filter out today's potentially incomplete record for history display
-  const historicalRecords = attendanceHistory.filter(record => record.date !== todayKey && record.logoutTime !== null)
+  // Also ensure only records for the current user are shown
+  const historicalRecords = attendanceHistory.filter(record => 
+    record.date !== todayKey && 
+    record.logoutTime !== null &&
+    record.email === userEmail // Filter by user email
+  )
     .sort((a, b) => dayjs(b.date).valueOf() - dayjs(a.date).valueOf()); // Sort by date descending
 
   return (

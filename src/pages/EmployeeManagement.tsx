@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -20,8 +19,19 @@ import {
   Edit,
   Eye,
   UserPlus,
-  ClipboardList
+  ClipboardList,
+  Mail,
+  Phone,
+  CheckCircle
 } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { Label } from '@/components/ui/label';
 
 const EmployeeManagement = () => {
   const userRole = localStorage.getItem('userRole') || 'employee';
@@ -58,14 +68,32 @@ const EmployeeManagement = () => {
     { id: 5, name: 'Robert Brown', email: 'robert@company.com', department: 'Finance', position: 'Financial Analyst', status: 'Active' },
   ];
 
+  const [isAddEmployeeModalOpen, setIsAddEmployeeModalOpen] = useState(false);
+  const [newEmployeeName, setNewEmployeeName] = useState('');
+  const [newEmployeeEmail, setNewEmployeeEmail] = useState('');
+  const [newEmployeePhone, setNewEmployeePhone] = useState('');
+  const [newEmployeeId, setNewEmployeeId] = useState('');
+
   const canManageEmployees = userRole === 'admin' || userRole === 'hr';
 
+  const handleAddEmployee = () => {
+    // Here you would typically send the new employee data to a backend
+    console.log('Adding Employee:', {
+      name: newEmployeeName,
+      email: newEmployeeEmail,
+      phone: newEmployeePhone,
+      id: newEmployeeId,
+    });
+    // Close modal and clear form
+    setIsAddEmployeeModalOpen(false);
+    setNewEmployeeName('');
+    setNewEmployeeEmail('');
+    setNewEmployeePhone('');
+    setNewEmployeeId('');
+  };
+
   return (
-    <DashboardLayout
-      sidebarItems={getSidebarItems()}
-      title="Employee Management"
-      userRole={userRole.charAt(0).toUpperCase() + userRole.slice(1)}
-    >
+    <DashboardLayout>
       <div className="space-y-6">
         {/* Header Section */}
         <div className="flex justify-between items-center">
@@ -74,7 +102,7 @@ const EmployeeManagement = () => {
             <p className="text-gray-600">Manage and view employee information</p>
           </div>
           {canManageEmployees && (
-            <Button className="bg-blue-600 hover:bg-blue-700">
+            <Button className="bg-blue-600 hover:bg-blue-700" onClick={() => setIsAddEmployeeModalOpen(true)}>
               <Plus className="h-4 w-4 mr-2" />
               Add Employee
             </Button>
@@ -141,58 +169,88 @@ const EmployeeManagement = () => {
             </div>
           </CardContent>
         </Card>
-
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Total Employees</p>
-                  <p className="text-2xl font-bold">{employees.length}</p>
-                </div>
-                <Users className="h-8 w-8 text-blue-600" />
-              </div>
-            </CardContent>
-          </Card>
-          
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Active</p>
-                  <p className="text-2xl font-bold">{employees.filter(e => e.status === 'Active').length}</p>
-                </div>
-                <UserPlus className="h-8 w-8 text-green-600" />
-              </div>
-            </CardContent>
-          </Card>
-          
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">On Leave</p>
-                  <p className="text-2xl font-bold">{employees.filter(e => e.status === 'On Leave').length}</p>
-                </div>
-                <Calendar className="h-8 w-8 text-orange-600" />
-              </div>
-            </CardContent>
-          </Card>
-          
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Departments</p>
-                  <p className="text-2xl font-bold">5</p>
-                </div>
-                <Settings className="h-8 w-8 text-purple-600" />
-              </div>
-            </CardContent>
-          </Card>
-        </div>
       </div>
+
+      {/* Add Employee Dialog */}
+      <Dialog open={isAddEmployeeModalOpen} onOpenChange={setIsAddEmployeeModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><UserPlus className="h-5 w-5" /> Add New Employee</DialogTitle>
+            <DialogDescription>
+              Fill in the employee's details below.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            {/* Full Name */}
+            <div className="space-y-2">
+              <Label htmlFor="fullName">Full Name</Label>
+              <div className="relative">
+                <Users className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                <Input
+                  id="fullName"
+                  placeholder="Enter full name"
+                  className="pl-10"
+                  value={newEmployeeName}
+                  onChange={(e) => setNewEmployeeName(e.target.value)}
+                />
+              </div>
+            </div>
+
+            {/* Email Address */}
+            <div className="space-y-2">
+              <Label htmlFor="emailAddress">Email Address</Label>
+              <div className="relative">
+                <Mail className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                <Input
+                  id="emailAddress"
+                  type="email"
+                  placeholder="Enter email address"
+                  className="pl-10"
+                  value={newEmployeeEmail}
+                  onChange={(e) => setNewEmployeeEmail(e.target.value)}
+                />
+              </div>
+            </div>
+
+            {/* Phone Number */}
+            <div className="space-y-2">
+              <Label htmlFor="phoneNumber">Phone Number</Label>
+              <div className="relative">
+                <Phone className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                <Input
+                  id="phoneNumber"
+                  type="tel"
+                  placeholder="Enter phone number"
+                  className="pl-10"
+                  value={newEmployeePhone}
+                  onChange={(e) => setNewEmployeePhone(e.target.value)}
+                />
+              </div>
+            </div>
+
+            {/* Employee ID */}
+            <div className="space-y-2">
+              <Label htmlFor="employeeId">Employee ID</Label>
+              <div className="relative">
+                <CheckCircle className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                <Input
+                  id="employeeId"
+                  placeholder="Enter employee ID"
+                  className="pl-10"
+                  value={newEmployeeId}
+                  onChange={(e) => setNewEmployeeId(e.target.value)}
+                />
+              </div>
+            </div>
+
+          </div>
+          <div className="flex justify-end">
+            <Button onClick={handleAddEmployee}>
+              Save Employee
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </DashboardLayout>
   );
 };
