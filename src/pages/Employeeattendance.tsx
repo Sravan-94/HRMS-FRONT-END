@@ -12,15 +12,24 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import axios from 'axios';
+import { toast } from "@/components/ui/use-toast";
 
 interface AttendanceRecord {
+  id: number;
   date: string;
-  loginTime: string | null;
-  logoutTime: string | null;
-  loginImage: string | null;
-  logoutImage: string | null;
-  duration: number; // Duration in seconds
-  email?: string; // Add email field to identify the user
+  clockIn: string;
+  clockOut: string | null;
+  status: string;
+  location: string;
+  setCheckInImageUrl: string | null;
+  setCheckOutImageUrl: string | null;
+  employee: {
+    empId: number;
+    ename: string;
+    email: string;
+  };
+  duration?: number;
 }
 
 // Helper function to format time in HH:MM:SS
@@ -64,65 +73,66 @@ const AttendancePage: React.FC = () => {
   const [hoursWorked, setHoursWorked] = useState<number>(0);
   const [logoutTime, setLogoutTime] = useState<string | null>(null);
   const [attendanceHistory, setAttendanceHistory] = useState<AttendanceRecord[]>([]);
-  const [currentDayRecord, setCurrentDayRecord] = useState<AttendanceRecord | null>(null); // State to hold today's record for summary
+  const [currentDayRecord, setCurrentDayRecord] = useState<AttendanceRecord | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
   const todayKey = dayjs().format('YYYY-MM-DD');
-  const localStorageKey = 'attendanceHistory';
-  const userEmail = localStorage.getItem('userEmail'); // Get logged-in user's email
+  const userEmail = localStorage.getItem('userEmail');
+  const retrievedEmpId = localStorage.getItem('empId'); // Retrieve empId using the correct key
 
+  console.log('Retrieved empId from localStorage:', retrievedEmpId);
+
+  // Fetch attendance history from API
   useEffect(() => {
-    const storedHistory = localStorage.getItem(localStorageKey);
-    if (storedHistory) {
-      const history: AttendanceRecord[] = JSON.parse(storedHistory);
-      // Filter history by logged-in user's email
-      const userHistory = history.filter(record => record.email === userEmail);
-      setAttendanceHistory(userHistory);
-
-      // Find today's record for the current user to restore current login state if any
-      const todayRecord = userHistory.find(record => record.date === todayKey);
-
-      if (todayRecord) {
-        setCurrentDayRecord(todayRecord);
-        if (todayRecord.loginTime && !todayRecord.logoutTime) {
-           // If logged in today and not yet logged out
-          setIsLoggedIn(true);
-          setLoginImage(todayRecord.loginImage);
-          setLoginTime(todayRecord.loginTime);
-
-          const loginTime = dayjs(todayRecord.loginTime);
-          const now = dayjs();
-          const elapsedSeconds = now.diff(loginTime, 'second');
-          setTimeLeft(Math.max(0, 9 * 60 * 60 - elapsedSeconds));
-        } else {
-           // If not logged in or already logged out today
-           setIsLoggedIn(false);
-           setLoginImage(null);
-           setLoginTime(null);
-           setTimeLeft(9 * 60 * 60);
-        }
-         setLogoutImage(todayRecord.logoutImage || null);
-         setLogoutTime(todayRecord.logoutTime || null);
-      } else {
-        // No record for today found
-        setIsLoggedIn(false);
-        setLoginImage(null);
-        setLogoutImage(null);
-        setLoginTime(null);
-        setTimeLeft(9 * 60 * 60);
-        setLogoutTime(null);
-        setCurrentDayRecord(null);
+    const fetchAttendanceHistory = async () => {
+      if (!retrievedEmpId) { // Use retrievedEmpId for the check
+        console.log('empId not available, skipping API call');
+        return;
       }
-    } else {
-      // No history found, reset state
-      setIsLoggedIn(false);
-      setLoginImage(null);
-      setLogoutImage(null);
-      setLoginTime(null);
-      setTimeLeft(9 * 60 * 60);
-      setLogoutTime(null);
-      setCurrentDayRecord(null);
-    }
-  }, [userEmail]); // Add userEmail to dependency array
+      
+      try {
+        console.log(`Fetching attendance history for empId: ${retrievedEmpId}`);
+        const response = await axios.get(`http://localhost:8080/api/attendance/employee/${retrievedEmpId}`);
+        console.log('Attendance history API response:', response.data);
+        const history: AttendanceRecord[] = response.data;
+        setAttendanceHistory(history);
+
+        console.log('Raw attendance history state after API call:', history);
+
+        // Find today's record
+        const todayRecord = history.find(record => record.date === todayKey);
+        if (todayRecord) {
+          setCurrentDayRecord(todayRecord);
+          if (todayRecord.clockIn && !todayRecord.clockOut) {
+            setIsLoggedIn(true);
+            setLoginImage(todayRecord.setCheckInImageUrl);
+            setLoginTime(todayRecord.clockIn);
+
+            const loginTime = dayjs(todayRecord.clockIn);
+            const now = dayjs();
+            const elapsedSeconds = now.diff(loginTime, 'second');
+            setTimeLeft(Math.max(0, 9 * 60 * 60 - elapsedSeconds));
+          } else {
+            setIsLoggedIn(false);
+            setLoginImage(null);
+            setLoginTime(null);
+            setTimeLeft(9 * 60 * 60);
+          }
+          setLogoutImage(todayRecord.setCheckOutImageUrl || null);
+          setLogoutTime(todayRecord.clockOut || null);
+        }
+      } catch (error) {
+        console.error('Error fetching attendance history:', error);
+        toast({
+          title: "Error",
+          description: "Failed to fetch attendance history",
+          variant: "destructive"
+        });
+      }
+    };
+
+    fetchAttendanceHistory();
+  }, [retrievedEmpId, todayKey]);
 
   useEffect(() => {
     let timer: NodeJS.Timeout;
@@ -146,14 +156,13 @@ const AttendancePage: React.FC = () => {
     return () => clearInterval(timer);
   }, [isLoggedIn, timeLeft]);
 
-
   const saveHistoryToStorage = (history: AttendanceRecord[]) => {
     // When saving, ensure we only save the current user's history by merging
     // with other users' history if it exists in localStorage.
-    const allHistory = JSON.parse(localStorage.getItem(localStorageKey) || '[]') as AttendanceRecord[];
-    const otherUsersHistory = allHistory.filter(record => record.email !== userEmail);
+    const allHistory = JSON.parse(localStorage.getItem('attendanceHistory') || '[]') as AttendanceRecord[];
+    const otherUsersHistory = allHistory.filter(record => record.employee.email !== userEmail);
     const updatedAllHistory = [...otherUsersHistory, ...history];
-    localStorage.setItem(localStorageKey, JSON.stringify(updatedAllHistory));
+    localStorage.setItem('attendanceHistory', JSON.stringify(updatedAllHistory));
   };
 
   const handleLogin = () => {
@@ -176,93 +185,187 @@ const AttendancePage: React.FC = () => {
     if (!imageSrc) return;
 
     const now = dayjs();
+    setIsLoading(true);
+
+    // Get the base64 string without the data URL prefix
+    const base64Image = imageSrc.split(',')[1];
 
     if (actionType === 'login') {
-      const newRecord: AttendanceRecord = {
-        date: todayKey,
-        loginTime: now.format(),
-        logoutTime: null,
-        loginImage: imageSrc,
-        logoutImage: null,
-        duration: 0,
-        email: userEmail // Store user email with the record
-      };
+      // Send check-in request to API with the format from Postman test
+      const formData = new FormData();
+      formData.append('userId', retrievedEmpId || '1'); // Use retrievedEmpId
+      formData.append('location', 'hyd'); // Hardcoded location as per test data
+      formData.append('file', dataURLtoFile(imageSrc, 'express.png')); // Convert base64 to file
 
-      // Add new record or replace if already exists for today for this user
-      const updatedHistory = attendanceHistory.filter(record => record.date !== todayKey);
-      updatedHistory.push(newRecord);
-      saveHistoryToStorage(updatedHistory);
-      setAttendanceHistory(updatedHistory);
-      setCurrentDayRecord(newRecord);
-
-      setIsLoggedIn(true);
-      setLoginImage(imageSrc);
-      setLoginTime(now.format());
-      setTimeLeft(9 * 60 * 60);
-
-    } else if (actionType === 'logout') {
-      const loginTimeObj = dayjs(loginTime);
-      const logoutTimeObj = now;
-      let calculatedDuration = 0;
-
-      if (loginTimeObj.isValid() && logoutTimeObj.isValid()) {
-        calculatedDuration = logoutTimeObj.diff(loginTimeObj, 'second');
-      }
-
-      // Update today's record for the current user in history
-      let updatedRecord: AttendanceRecord | null = null;
-      const updatedHistory = attendanceHistory.map(record => {
-        if (record.date === todayKey) {
-          updatedRecord = {
-            ...record,
-            logoutTime: logoutTimeObj.format(),
-            logoutImage: imageSrc,
-            duration: calculatedDuration
-          };
-          return updatedRecord;
+      axios.post('http://localhost:8080/api/attendance/checkin', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
         }
-        return record;
-      });
-      saveHistoryToStorage(updatedHistory);
-      setAttendanceHistory(updatedHistory);
+      })
+      .then(response => {
+        console.log('Check-in API Response:', response.data);
+        
+        // Create data URL for display
+        const displayImage = `data:image/jpeg;base64,${base64Image}`;
+        
+        const newRecord: AttendanceRecord = {
+          id: response.data.id,
+          date: response.data.date || todayKey,
+          clockIn: response.data.clockIn || now.format(),
+          clockOut: null,
+          status: response.data.status || 'Present',
+          location: response.data.location || 'hyd',
+          setCheckInImageUrl: displayImage,
+          setCheckOutImageUrl: null,
+          employee: {
+            empId: parseInt(retrievedEmpId || '1'), // Use retrievedEmpId
+            ename: '',
+            email: userEmail || ''
+          },
+          duration: undefined
+        };
 
-      if (updatedRecord) {
-        setCurrentDayRecord(updatedRecord);
-        setHoursWorked(updatedRecord.duration);
-        setLogoutTime(updatedRecord.logoutTime);
-        // Show summary dialog using the updated record data
-        setShowLogoutSummary(true);
+        // Update attendance history
+        setAttendanceHistory(prev => [...prev, newRecord]);
+        setCurrentDayRecord(newRecord);
+
+        setIsLoggedIn(true);
+        setLoginImage(displayImage);
+        setLoginTime(newRecord.clockIn);
+        setTimeLeft(9 * 60 * 60);
+
+        toast({
+          title: "Success",
+          description: "Check-in recorded successfully!",
+        });
+      })
+      .catch(error => {
+        console.error('Check-in API Error:', error);
+        toast({
+          title: "Error",
+          description: error.response?.data?.message || "Failed to record check-in. Please try again.",
+          variant: "destructive"
+        });
+      })
+      .finally(() => {
+        setIsLoading(false);
+      });
+    } else if (actionType === 'logout') {
+      if (!currentDayRecord?.id) {
+        toast({
+          title: "Error",
+          description: "No check-in record found for today. Please check-in first.",
+          variant: "destructive"
+        });
+        setIsLoading(false);
+        setIsCameraOpen(false);
+        setActionType(null);
+        return;
       }
 
-      // Reset state for next login AFTER showing the summary
-      setIsLoggedIn(false);
-      setLoginImage(null);
-      setLoginTime(null);
-      setTimeLeft(9 * 60 * 60);
-      setLogoutImage(imageSrc);
+      // Send check-out request to API with the format from Postman test
+      const formData = new FormData();
+      formData.append('file', dataURLtoFile(imageSrc, 'express.png')); // Convert base64 to file
 
+      axios.post(`http://localhost:8080/api/attendance/checkout/${currentDayRecord.id}`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      })  
+      .then(response => {
+        console.log('Check-out API Response:', response.data);
+
+        const loginTimeObj = dayjs(loginTime);
+        const logoutTimeObj = now;
+        const calculatedDuration = loginTimeObj.isValid() && logoutTimeObj.isValid() 
+          ? logoutTimeObj.diff(loginTimeObj, 'second')
+          : 0;
+
+        // Create data URL for display
+        const displayImage = `data:image/jpeg;base64,${base64Image}`;
+
+        // Update today's record
+        const updatedRecord: AttendanceRecord = {
+          ...currentDayRecord,
+          clockOut: logoutTimeObj.format(),
+          setCheckOutImageUrl: displayImage,
+          duration: calculatedDuration
+        };
+
+        // Update attendance history
+        setAttendanceHistory(prev => 
+          prev.map(record => 
+            record.id === currentDayRecord.id ? updatedRecord : record
+          )
+        );
+
+        setCurrentDayRecord(updatedRecord);
+        setHoursWorked(calculatedDuration);
+        setLogoutTime(updatedRecord.clockOut);
+        setShowLogoutSummary(true);
+
+        // Reset state for next login AFTER showing the summary
+        setIsLoggedIn(false);
+        setLoginImage(null);
+        setLoginTime(null);
+        setTimeLeft(9 * 60 * 60);
+        setLogoutImage(displayImage);
+
+        toast({
+          title: "Success",
+          description: "Check-out recorded successfully!",
+        });
+      })
+      .catch(error => {
+        console.error('Check-out API Error:', error);
+        toast({
+          title: "Error",
+          description: error.response?.data?.message || "Failed to record check-out. Please try again.",
+          variant: "destructive"
+        });
+      })
+      .finally(() => {
+        setIsLoading(false);
+      });
     }
 
     setIsCameraOpen(false);
     setActionType(null);
-
-    // After capture (login or logout), re-load and filter history for the current user
-    const storedHistoryAfterCapture = localStorage.getItem(localStorageKey);
-    if (storedHistoryAfterCapture) {
-      const historyAfterCapture: AttendanceRecord[] = JSON.parse(storedHistoryAfterCapture);
-      const userHistoryAfterCapture = historyAfterCapture.filter(record => record.email === userEmail);
-      setAttendanceHistory(userHistoryAfterCapture);
-    }
   };
 
-  // Filter out today's potentially incomplete record for history display
-  // Also ensure only records for the current user are shown
-  const historicalRecords = attendanceHistory.filter(record => 
-    record.date !== todayKey && 
-    record.logoutTime !== null &&
-    record.email === userEmail // Filter by user email
-  )
+  // Helper function to convert data URL to File
+  const dataURLtoFile = (dataurl: string, filename: string) => {
+    const arr = dataurl.split(',');
+    const mime = arr[0].match(/:(.*?);/)?.[1];
+    const bstr = atob(arr[1]);
+    let n = bstr.length;
+    const u8arr = new Uint8Array(n);
+    while (n--) {
+      u8arr[n] = bstr.charCodeAt(n);
+    }
+    return new File([u8arr], filename, { type: mime });
+  };
+
+  // Calculate duration for a record
+  const calculateDuration = (record: AttendanceRecord) => {
+    if (!record.clockIn || !record.clockOut) return 0;
+    const loginTime = dayjs(record.clockIn);
+    const logoutTime = dayjs(record.clockOut);
+    return logoutTime.diff(loginTime, 'second');
+  };
+
+  // Prepare records for history display (including today's record if exists)
+  const historicalRecords = attendanceHistory
+    .filter(record => 
+      record.clockIn // Ensure there's a clock in time
+    )
+    .map(record => ({
+      ...record,
+      duration: calculateDuration(record)
+    }))
     .sort((a, b) => dayjs(b.date).valueOf() - dayjs(a.date).valueOf()); // Sort by date descending
+
+  console.log('Filtered historical records:', historicalRecords);
 
   return (
     <DashboardLayout>
@@ -361,6 +464,10 @@ const AttendancePage: React.FC = () => {
                     src={loginImage}
                     alt="Login Selfie"
                     className="w-40 h-40 mx-auto rounded-full object-cover shadow-lg"
+                    onError={(e) => {
+                      console.error('Error loading login image');
+                      e.currentTarget.src = ''; // Clear the src on error
+                    }}
                   />
                   {loginTime && (
                     <p className="text-center text-sm text-gray-600">
@@ -387,6 +494,10 @@ const AttendancePage: React.FC = () => {
                     src={logoutImage}
                     alt="Logout Selfie"
                     className="w-40 h-40 mx-auto rounded-full object-cover shadow-lg"
+                    onError={(e) => {
+                      console.error('Error loading logout image');
+                      e.currentTarget.src = ''; // Clear the src on error
+                    }}
                   />
                   {logoutTime && (
                     <p className="text-center text-sm text-gray-600">
@@ -411,18 +522,20 @@ const AttendancePage: React.FC = () => {
           <CardContent>
             {historicalRecords.length > 0 ? (
               <div className="space-y-6">
-                {historicalRecords.map(record => (
-                  <div key={record.date} className="flex flex-col p-4 border rounded-lg shadow-sm">
+                {historicalRecords.map((record) => (
+                  <div key={record.id} className="flex flex-col p-4 border rounded-lg shadow-sm">
                     <div className="flex justify-between items-center mb-4">
                       <span className="text-lg font-semibold text-gray-800">{dayjs(record.date).format('MMM DD, YYYY')}</span>
-                      <span className="text-blue-600 font-medium">{formatDuration(record.duration)}</span>
+                      <Badge variant="outline" className="text-blue-600">
+                        {formatDuration(record.duration || 0)}
+                      </Badge>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
                         <p className="text-sm font-medium text-gray-600 mb-2">Login</p>
-                        {record.loginImage ? (
+                        {record.setCheckInImageUrl ? (
                           <img
-                            src={record.loginImage}
+                            src={record.setCheckInImageUrl}
                             alt={`Login Selfie ${record.date}`}
                             className="w-32 h-32 mx-auto rounded-lg object-cover shadow-md"
                           />
@@ -431,17 +544,17 @@ const AttendancePage: React.FC = () => {
                             No Image
                           </div>
                         )}
-                        {record.loginTime && (
+                        {record.clockIn && (
                           <p className="text-center text-sm text-gray-600 mt-2">
-                            {formatDateTime(record.loginTime)}
+                            {formatDateTime(record.clockIn)}
                           </p>
                         )}
                       </div>
                       <div>
                         <p className="text-sm font-medium text-gray-600 mb-2">Logout</p>
-                        {record.logoutImage ? (
+                        {record.setCheckOutImageUrl ? (
                           <img
-                            src={record.logoutImage}
+                            src={record.setCheckOutImageUrl}
                             alt={`Logout Selfie ${record.date}`}
                             className="w-32 h-32 mx-auto rounded-lg object-cover shadow-md"
                           />
@@ -450,9 +563,9 @@ const AttendancePage: React.FC = () => {
                             No Image
                           </div>
                         )}
-                        {record.logoutTime && (
+                        {record.clockOut && (
                           <p className="text-center text-sm text-gray-600 mt-2">
-                            {formatDateTime(record.logoutTime)}
+                            {formatDateTime(record.clockOut)}
                           </p>
                         )}
                       </div>
@@ -461,7 +574,10 @@ const AttendancePage: React.FC = () => {
                 ))}
               </div>
             ) : (
-              <p className="text-center text-gray-500">No previous attendance records found.</p>
+              <div className="text-center py-8">
+                <p className="text-gray-500">No previous attendance records found.</p>
+                <p className="text-sm text-gray-400 mt-2">Your attendance history will appear here after you log in and out.</p>
+              </div>
             )}
           </CardContent>
         </Card>
@@ -485,8 +601,9 @@ const AttendancePage: React.FC = () => {
               <Button
                 onClick={capture}
                 className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium transition-colors duration-200"
+                disabled={isLoading}
               >
-                Capture
+                {isLoading ? 'Processing...' : 'Capture'}
               </Button>
               <Button
                 onClick={() => {
@@ -494,6 +611,7 @@ const AttendancePage: React.FC = () => {
                   setActionType(null);
                 }}
                 className="text-gray-600 hover:text-gray-800 font-medium transition-colors duration-200"
+                disabled={isLoading}
               >
                 Cancel
               </Button>
@@ -523,12 +641,12 @@ const AttendancePage: React.FC = () => {
               <div className="space-y-2">
                 <p className="text-sm text-gray-600">Login Time</p>
                 {/* Display login time only if valid */}
-                <p className="text-sm font-medium">{currentDayRecord?.loginTime ? formatDateTime(currentDayRecord.loginTime) : '--'}</p>
+                <p className="text-sm font-medium">{currentDayRecord?.clockIn ? formatDateTime(currentDayRecord.clockIn) : '--'}</p>
               </div>
               <div className="space-y-2">
                 <p className="text-sm text-gray-600">Logout Time</p>
                 {/* Display logout time only if valid */}
-                <p className="text-sm font-medium">{currentDayRecord?.logoutTime ? formatDateTime(currentDayRecord.logoutTime) : '--'}</p>
+                <p className="text-sm font-medium">{currentDayRecord?.clockOut ? formatDateTime(currentDayRecord.clockOut) : '--'}</p>
               </div>
             </div>
           </div>

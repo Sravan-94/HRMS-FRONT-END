@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { Building2, Users, UserCheck, User } from 'lucide-react';
+import axios from 'axios';
 
 const Index = () => {
   const [email, setEmail] = useState('');
@@ -15,7 +16,7 @@ const Index = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
     if (!email || !password || !role) {
       toast({
@@ -26,28 +27,60 @@ const Index = () => {
       return;
     }
 
-    // Store user role in localStorage for demo purposes
-    localStorage.setItem('userRole', role);
-    localStorage.setItem('userEmail', email);
-    
-    toast({
-      title: "Success",
-      description: "Login successful!",
-    });
+    try {
+      const response = await axios.post('http://localhost:8080/emps/login', {
+        email,
+        password
+      });
 
-    // Navigate based on role
-    switch (role) {
-      case 'admin':
-        navigate('/admin-dashboard');
-        break;
-      case 'hr':
-        navigate('/hr-dashboard');
-        break;
-      case 'employee':
-        navigate('/employee-dashboard');
-        break;
-      default:
-        break;
+      const userData = response.data;
+
+      // Verify if the selected role matches the API response role
+      if (userData.role.toLowerCase() !== role.toLowerCase()) {
+        toast({
+          title: "Error",
+          description: "Selected role does not match your account",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      // Store user data in localStorage
+      localStorage.setItem('userRole', userData.role);
+      localStorage.setItem('userEmail', userData.email);
+      localStorage.setItem('empId', userData.empId);
+      localStorage.setItem('ename', userData.ename);
+
+      toast({
+        title: "Success",
+        description: `Welcome, ${userData.ename}!`,
+      });
+
+      // Navigate based on role
+      switch (userData.role.toLowerCase()) {
+        case 'admin':
+          navigate('/admin-dashboard');
+          break;
+        case 'hr':
+          navigate('/hr-dashboard');
+          break;
+        case 'employee':
+          navigate('/employee-dashboard');
+          break;
+        default:
+          toast({
+            title: "Error",
+            description: "Invalid role",
+            variant: "destructive"
+          });
+          break;
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error.response?.data?.message || "Invalid email or password",
+        variant: "destructive"
+      });
     }
   };
 
@@ -127,15 +160,6 @@ const Index = () => {
                 Sign In
               </Button>
             </form>
-
-            <div className="mt-6 pt-6 border-t border-gray-200">
-              <div className="text-sm text-gray-600 text-center">
-                <p className="mb-2">Demo Credentials:</p>
-                <p>Admin: admin@company.com / admin123</p>
-                <p>HR: hr@company.com / hr123</p>
-                <p>Employee: employee@company.com / emp123</p>
-              </div>
-            </div>
           </CardContent>
         </Card>
       </div>

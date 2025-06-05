@@ -31,7 +31,8 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 const Performance = () => {
-  const userRole = localStorage.getItem('userRole') || 'employee';
+  const storedUserRole = localStorage.getItem('userRole') || 'employee';
+  const userRole = storedUserRole.toLowerCase(); // Convert to lowercase
   
   const getSidebarItems = () => {
     const baseItems = [

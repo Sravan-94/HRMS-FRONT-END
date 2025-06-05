@@ -16,6 +16,8 @@ import Documents from "./pages/Documents";
 import NotFound from "./pages/NotFound";
 import Employeeattendance from "./pages/Employeeattendance";
 import Employeeleave from "./pages/Employeeleave";
+import EmployeePerformance from "./pages/EmployeePerformance";
+import EmployeeDocuments from "./pages/EmployeeDocuments";
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -36,6 +38,8 @@ const App = () => (
           <Route path="/documents" element={<Documents />} />
           <Route path="/employee-attendance" element={<Employeeattendance />} />
           <Route path="/employee-leaves" element={<Employeeleave />} />
+          <Route path="/employee-performance" element={<EmployeePerformance />} />
+          <Route path="/employee-documents" element={<EmployeeDocuments />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

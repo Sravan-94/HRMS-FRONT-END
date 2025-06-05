@@ -16,6 +16,7 @@ import {
   LogOut
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useEffect } from 'react';
 
 interface SidebarItem {
   icon: LucideIcon;
@@ -28,7 +29,15 @@ const DashboardSidebar = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const userRole = localStorage.getItem('userRole') || 'employee';
+  const storedUserRole = localStorage.getItem('userRole') || 'employee';
+  const userRole = storedUserRole.toLowerCase(); // Convert to lowercase for consistent comparison
+
+  console.log('DashboardSidebar userRole:', userRole);
+
+  useEffect(() => {
+    console.log('DashboardSidebar useEffect - userRole changed:', userRole);
+    // Any logic that should run when userRole changes can go here
+  }, [userRole]); // Depend on userRole
 
   const handleLogout = () => {
     // Clear user data from localStorage
@@ -59,16 +68,16 @@ const DashboardSidebar = () => {
       roles: ['admin', 'hr']
     },
     { 
-      icon: Calendar, 
-      label: 'My Leaves', 
-      path: '/employee-leaves',
-      roles: ['employee']
-    },
-    { 
       icon: Clock, 
       label: 'Attendance', 
       path: '/attendance',
       roles: ['admin', 'hr']
+    },
+    { 
+      icon: Calendar, 
+      label: 'My Leaves', 
+      path: '/employee-leaves',
+      roles: ['employee']
     },
     { 
       icon: Clock, 
@@ -79,12 +88,12 @@ const DashboardSidebar = () => {
     { 
       icon: TrendingUp, 
       label: 'Performance', 
-      path: '/performance' 
+      path: userRole === 'employee' ? '/employee-performance' : '/performance' 
     },
     { 
       icon: FileText, 
       label: 'Documents', 
-      path: '/documents' 
+      path: userRole === 'employee' ? '/employee-documents' : '/documents' 
     },
     // Admin specific items
     { 
@@ -93,37 +102,6 @@ const DashboardSidebar = () => {
       path: '/employee-management',
       roles: ['admin', 'hr']
     },
-    // { 
-    //   icon: DollarSign, 
-    //   label: 'Payroll', 
-    //   path: '/payroll',
-    //   roles: ['admin']
-    // },
-    // { 
-    //   icon: Building2, 
-    //   label: 'Department Management', 
-    //   path: '/departments',
-    //   roles: ['admin']
-    // },
-    // { 
-    //   icon: BarChart3, 
-    //   label: 'Analytics', 
-    //   path: '/analytics',
-    //   roles: ['admin']
-    // },
-    // // HR specific items
-    // { 
-    //   icon: ClipboardList, 
-    //   label: 'Recruitment', 
-    //   path: '/recruitment',
-    //   roles: ['admin', 'hr']
-    // },
-    // { 
-    //   icon: UserPlus, 
-    //   label: 'Onboarding', 
-    //   path: '/onboarding',
-    //   roles: ['admin', 'hr']
-    // },
     // Employee specific items
     { 
       icon: Users, 
@@ -131,13 +109,7 @@ const DashboardSidebar = () => {
       path: '/profile',
       roles: ['employee']
     },
-    // Settings for admin and HR
-    // { 
-    //   icon: Settings, 
-    //   label: 'Settings', 
-    //   path: '/settings',
-    //   roles: ['admin', 'hr']
-    // },
+  
   ];
 
   // Filter items based on user role

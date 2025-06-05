@@ -32,9 +32,13 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Label } from '@/components/ui/label';
+import axios from 'axios';
+import { useToast } from '@/hooks/use-toast';
 
 const EmployeeManagement = () => {
-  const userRole = localStorage.getItem('userRole') || 'employee';
+  const storedUserRole = localStorage.getItem('userRole') || 'employee';
+  const userRole = storedUserRole.toLowerCase(); // Convert to lowercase
+  const { toast } = useToast();
   
   const getSidebarItems = () => {
     const baseItems = [
@@ -60,36 +64,91 @@ const EmployeeManagement = () => {
     return baseItems;
   };
 
-  const employees = [
+  const [employees, setEmployees] = useState([
     { id: 1, name: 'John Doe', email: 'john@company.com', department: 'Engineering', position: 'Senior Developer', status: 'Active' },
     { id: 2, name: 'Sarah Wilson', email: 'sarah@company.com', department: 'Marketing', position: 'Marketing Manager', status: 'Active' },
     { id: 3, name: 'Mike Johnson', email: 'mike@company.com', department: 'Sales', position: 'Sales Representative', status: 'Active' },
     { id: 4, name: 'Emily Davis', email: 'emily@company.com', department: 'HR', position: 'HR Specialist', status: 'On Leave' },
     { id: 5, name: 'Robert Brown', email: 'robert@company.com', department: 'Finance', position: 'Financial Analyst', status: 'Active' },
-  ];
+  ]);
 
   const [isAddEmployeeModalOpen, setIsAddEmployeeModalOpen] = useState(false);
   const [newEmployeeName, setNewEmployeeName] = useState('');
   const [newEmployeeEmail, setNewEmployeeEmail] = useState('');
   const [newEmployeePhone, setNewEmployeePhone] = useState('');
   const [newEmployeeId, setNewEmployeeId] = useState('');
+  const [newEmployeePassword, setNewEmployeePassword] = useState('');
+  const [newEmployeeConfirmPassword, setNewEmployeeConfirmPassword] = useState('');
 
   const canManageEmployees = userRole === 'admin' || userRole === 'hr';
 
-  const handleAddEmployee = () => {
-    // Here you would typically send the new employee data to a backend
-    console.log('Adding Employee:', {
-      name: newEmployeeName,
-      email: newEmployeeEmail,
-      phone: newEmployeePhone,
-      id: newEmployeeId,
-    });
-    // Close modal and clear form
-    setIsAddEmployeeModalOpen(false);
-    setNewEmployeeName('');
-    setNewEmployeeEmail('');
-    setNewEmployeePhone('');
-    setNewEmployeeId('');
+  const handleAddEmployee = async () => {
+    if (!newEmployeeName || !newEmployeeEmail || !newEmployeePhone || !newEmployeeId || !newEmployeePassword || !newEmployeeConfirmPassword) {
+      toast({
+        title: "Error",
+        description: "Please fill in all fields",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (newEmployeePassword !== newEmployeeConfirmPassword) {
+      toast({
+        title: "Error",
+        description: "Password and Confirm Password do not match",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      const response = await axios.post('http://localhost:8080/emps/saveEmp', {
+        ename: newEmployeeName,
+        email: newEmployeeEmail,
+        phone: Number(newEmployeePhone),
+        employeeid: newEmployeeId,
+        password: newEmployeePassword,
+        role: 'employee'
+      });
+
+      console.log('API Response:', response.data);
+
+      const addedEmployee = response.data;
+
+      setEmployees(prevEmployees => [
+        ...prevEmployees,
+        {
+          id: addedEmployee.empId,
+          name: addedEmployee.ename,
+          email: addedEmployee.email,
+          employeeid: addedEmployee.employeeid,
+          department: addedEmployee.department || 'Not Assigned',
+          position: addedEmployee.position || 'Pending',
+          status: addedEmployee.status || 'Active',
+        }
+      ]);
+
+      toast({
+        title: "Success",
+        description: `Employee ${newEmployeeName} added successfully!`,
+      });
+
+      setIsAddEmployeeModalOpen(false);
+      setNewEmployeeName('');
+      setNewEmployeeEmail('');
+      setNewEmployeePhone('');
+      setNewEmployeeId('');
+      setNewEmployeePassword('');
+      setNewEmployeeConfirmPassword('');
+
+    } catch (error) {
+      console.error('Error adding employee:', error);
+      toast({
+        title: "Error",
+        description: error.response?.data?.message || "Failed to add employee",
+        variant: "destructive"
+      });
+    }
   };
 
   return (
@@ -146,6 +205,7 @@ const EmployeeManagement = () => {
                     <div>
                       <h3 className="font-semibold">{employee.name}</h3>
                       <p className="text-sm text-gray-600">{employee.email}</p>
+                      <p className="text-sm text-gray-500">ID: {employee.employeeid}</p>
                       <p className="text-sm text-gray-500">{employee.department} • {employee.position}</p>
                     </div>
                   </div>
@@ -241,6 +301,30 @@ const EmployeeManagement = () => {
                   onChange={(e) => setNewEmployeeId(e.target.value)}
                 />
               </div>
+            </div>
+
+            {/* Password */}
+            <div className="space-y-2">
+              <Label htmlFor="password">Password</Label>
+              <Input
+                id="password"
+                type="password"
+                placeholder="Enter password"
+                value={newEmployeePassword}
+                onChange={(e) => setNewEmployeePassword(e.target.value)}
+              />
+            </div>
+
+            {/* Confirm Password */}
+            <div className="space-y-2">
+              <Label htmlFor="confirmPassword">Confirm Password</Label>
+              <Input
+                id="confirmPassword"
+                type="password"
+                placeholder="Confirm password"
+                value={newEmployeeConfirmPassword}
+                onChange={(e) => setNewEmployeeConfirmPassword(e.target.value)}
+              />
             </div>
 
           </div>
