@@ -52,54 +52,63 @@ const Attendance = () => {
           // Flatten the deeply nested structure and handle different field names
           const transformedData: AttendanceRecord[] = [];
 
+          // Iterate directly over the attendance records received from the API
           response.data.forEach((record: any) => {
             console.log('Processing raw record:', record);
 
             const employeeData = record.employee;
             console.log('Extracted employeeData:', employeeData);
 
-            const employeeId = employeeData?.id || employeeData?.empId || null;
+            // Explicitly access attendance detail fields, providing fallbacks
+            const attendanceDate = record.date || record.attDate || null;
+            const attendanceClockIn = record.clockIn || record.checkIn || null;
+            const attendanceClockOut = record.clockOut || record.checkOut || null;
+            const attendanceDuration = record.duration || record.attDuration || 0;
+            const attendanceStatus = record.status || record.attStatus || 'Unknown';
+            const attendanceLoginImage = record.setCheckInImageUrl || record.loginImage || record.checkInImage || null;
+            const attendanceLogoutImage = record.setCheckOutImageUrl || record.logoutImage || record.checkOutImage || null;
+
+            const employeeId = employeeData?.empId || employeeData?.id || null;
             const employeeName = employeeData?.ename || employeeData?.name || employeeData?.empName || 'Unknown Employee';
             const employeeEmail = employeeData?.email || employeeData?.empEmail || null;
 
-            // Check if employeeData and attendances array exist and is not empty
-            if (employeeData && Array.isArray(employeeData.attendances) && employeeData.attendances.length > 0) {
-              employeeData.attendances.forEach((attendanceDetail: any) => {
-                 console.log('Processing nested attendance detail:', attendanceDetail);
-
-                // Explicitly access attendance detail fields, providing fallbacks
-                const attendanceDate = attendanceDetail.date || attendanceDetail.attDate || null; // Added attDate as potential fallback
-                const attendanceClockIn = attendanceDetail.clockIn || attendanceDetail.checkIn || null;
-                const attendanceClockOut = attendanceDetail.clockOut || attendanceDetail.checkOut || null;
-                const attendanceDuration = attendanceDetail.duration || attendanceDetail.attDuration || 0; // Added attDuration
-                const attendanceStatus = attendanceDetail.status || attendanceDetail.attStatus || 'Unknown'; // Added attStatus
-                const attendanceLoginImage = attendanceDetail.loginImage || attendanceDetail.checkInImage || null;
-                const attendanceLogoutImage = attendanceDetail.logoutImage || attendanceDetail.checkOutImage || null;
-
-                const transformedRecord: AttendanceRecord = {
-                  id: attendanceDetail.id, // Use the attendance detail's id
-                  date: attendanceDate, 
-                  clockIn: attendanceClockIn,
-                  clockOut: attendanceClockOut,
-                  duration: attendanceDuration,
-                  status: attendanceStatus,
-                  employee: {
-                    id: employeeId, // Use the extracted employee id
-                    name: employeeName, // Use the extracted employee name
-                    email: employeeEmail // Use the extracted employee email
-                  },
-                  loginImage: attendanceLoginImage,
-                  logoutImage: attendanceLogoutImage
-                };
-                console.log('Transformed attendance record:', transformedRecord);
-                transformedData.push(transformedRecord);
-              });
-            } else {
-                console.warn('Skipping record due to missing employee or attendance details:', record);
-            }
+            const transformedRecord: AttendanceRecord = {
+              id: record.id, // Use the attendance record's id
+              date: attendanceDate, 
+              clockIn: attendanceClockIn,
+              clockOut: attendanceClockOut,
+              duration: attendanceDuration,
+              status: attendanceStatus,
+              employee: {
+                id: employeeId,
+                name: employeeName,
+                email: employeeEmail
+              },
+              loginImage: attendanceLoginImage,
+              logoutImage: attendanceLogoutImage
+            };
+            console.log('Transformed attendance record:', transformedRecord);
+            transformedData.push(transformedRecord);
           });
 
           console.log('Final transformed attendance records:', JSON.stringify(transformedData, null, 2));
+
+          // Sort attendance data: logged in users first, then by date/clockIn descending
+          transformedData.sort((a, b) => {
+            const aHasClockIn = !!a.clockIn;
+            const bHasClockIn = !!b.clockIn;
+
+            // Prioritize records with clockIn
+            if (aHasClockIn && !bHasClockIn) return -1; // a comes first
+            if (!aHasClockIn && bHasClockIn) return 1;  // b comes first
+
+            // If both have clockIn or neither has clockIn, sort by timestamp descending
+            const aTime = aHasClockIn ? dayjs(a.clockIn) : dayjs(a.date);
+            const bTime = bHasClockIn ? dayjs(b.clockIn) : dayjs(b.date);
+
+            return bTime.valueOf() - aTime.valueOf(); // Latest first
+          });
+
           setAttendanceData(transformedData);
         })
         .catch(error => {

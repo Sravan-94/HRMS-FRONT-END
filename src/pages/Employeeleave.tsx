@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -20,42 +20,25 @@ import { Calendar as CalendarIcon } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
+import axios from 'axios';
+import { toast } from '@/components/ui/use-toast';
+import { useLocation } from 'react-router-dom';
+
+interface LeaveRecord {
+  id: number;
+  type: string;
+  startDate: string;
+  endDate: string;
+  status: string;
+  reason: string;
+  approvedBy: string;
+}
 
 const Employeeleave = () => {
-  const userId = localStorage.getItem('userId') || '1';
+  const empId = localStorage.getItem('empId'); // Use empId from localStorage
+  const location = useLocation(); // Get the current location
 
-  // Mock data for a single employee's leaves
-  const initialEmployeeLeaves = [
-    { 
-      id: 1, 
-      type: 'Casual Leave',
-      startDate: '2024-03-15',
-      endDate: '2024-03-18',
-      status: 'Approved',
-      reason: 'Family vacation',
-      approvedBy: 'Sarah Wilson (HR)'
-    },
-    { 
-      id: 2, 
-      type: 'Sick Leave',
-      startDate: '2024-02-20',
-      endDate: '2024-02-21',
-      status: 'Approved',
-      reason: 'Medical appointment',
-      approvedBy: 'Sarah Wilson (HR)'
-    },
-    { 
-      id: 3, 
-      type: 'Casual Leave',
-      startDate: '2024-04-01',
-      endDate: '2024-04-05',
-      status: 'Pending',
-      reason: 'Personal work',
-      approvedBy: 'Pending'
-    },
-  ];
-
-  const [employeeLeaves, setEmployeeLeaves] = useState(initialEmployeeLeaves);
+  const [employeeLeaves, setEmployeeLeaves] = useState<LeaveRecord[]>([]);
   const [isRequestLeaveDialogOpen, setIsRequestLeaveDialogOpen] = useState(false);
   const [leaveType, setLeaveType] = useState('');
   const [fromDate, setFromDate] = useState<Date | undefined>(undefined);
@@ -63,46 +46,149 @@ const Employeeleave = () => {
   const [leaveReason, setLeaveReason] = useState('');
   const [attachment, setAttachment] = useState<File | null>(null);
 
-  // Mock data for leave balances
+  // Mock data for leave balances - typically fetched from backend as well
   const leaveBalances = {
     Casual: { total: 20, used: 8, remaining: 12 },
     sick: { total: 10, used: 2, remaining: 8 },
     unpaid: { total: 30, used: 0, remaining: 30 }
   };
 
-  const handleRequestLeave = () => {
+  // Function to fetch leave history
+  const fetchLeaveHistory = async () => {
+    if (!empId) {
+      console.log('Employee ID not available, skipping leave history fetch.');
+      return;
+    }
+    try {
+      const response = await axios.get(`http://localhost:8080/leaves/employee/${empId}`);
+      console.log('Leave history fetched at', new Date().toLocaleString(), ':', response.data);
+      console.log('Fetched leave statuses:', response.data.map((leave: any) => ({
+        id: leave.lid,
+        status: leave.status,
+      })));
+      const fetchedLeaves: LeaveRecord[] = response.data.map((leave: any) => ({
+        id: leave.lid,
+        type: leave.leaveType,
+        startDate: format(new Date(leave.leaveDate), 'yyyy-MM-dd'),
+        endDate: format(new Date(leave.endDate), 'yyyy-MM-dd'),
+        status: leave.status.charAt(0).toUpperCase() + leave.status.slice(1).toLowerCase(), // Capitalize status
+        reason: leave.reason || 'N/A', // API response might not have reason, so fallback to 'N/A'
+        approvedBy: leave.status.toLowerCase() === 'pending' ? (leave.approvedBy || 'Pending') : (leave.approvedBy || '-'), // Set approvedBy based on status
+      }));
+
+      // Only update state if the data has changed to prevent unnecessary re-renders
+      if (JSON.stringify(fetchedLeaves) !== JSON.stringify(employeeLeaves)) {
+        console.log('Updating employeeLeaves state with new data:', fetchedLeaves);
+        setEmployeeLeaves(fetchedLeaves);
+      } else {
+        console.log('No changes in leave data, skipping state update.');
+      }
+    } catch (error) {
+      console.error('Error fetching leave history:', error);
+      toast({
+        title: "Error",
+        description: "Failed to fetch leave history. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Fetch leave history on component mount or when location changes
+  useEffect(() => {
+    fetchLeaveHistory();
+  }, [empId, location.pathname]); // Re-run if empId or location.pathname changes
+
+  // Set up polling to refresh leave history every 30 seconds
+  useEffect(() => {
+    const pollingInterval = 30 * 1000; // 30 seconds
+    const intervalId = setInterval(() => {
+      console.log('Polling leave history for updates at', new Date().toLocaleString(), '...');
+      fetchLeaveHistory();
+    }, pollingInterval);
+
+    // Cleanup interval on component unmount
+    return () => {
+      console.log('Clearing polling interval on unmount.');
+      clearInterval(intervalId);
+    };
+  }, [empId, location.pathname]); // Re-run polling if empId or location.pathname changes
+
+  const handleRequestLeave = async () => {
     // Simple validation
     if (!leaveType || !fromDate || !toDate || !leaveReason) {
-      alert('Please fill in all required fields.');
+      toast({
+        title: "Validation Error",
+        description: "Please fill in all required fields.",
+        variant: "destructive",
+      });
       return;
     }
 
-    const newLeaveRequest = {
-      id: employeeLeaves.length + 1, // Simple unique ID for mock data
-      type: leaveType,
-      startDate: format(fromDate, 'yyyy-MM-dd'),
-      endDate: format(toDate, 'yyyy-MM-dd'),
-      status: 'Pending', // Always pending initially
-      reason: leaveReason,
-      approvedBy: 'Pending',
-      // attachment: attachment // Handle attachment upload separately in a real app
+    const empId = localStorage.getItem('empId'); // Use empId from localStorage
+    if (!empId) {
+      toast({
+        title: "Error",
+        description: "Employee ID not found. Please log in again.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Format dates to ISO string like '2025-06-10T09:00:00'
+    const formattedFromDate = fromDate ? format(fromDate, 'yyyy-MM-dd') + 'T09:00:00' : '';
+    const formattedToDate = toDate ? format(toDate, 'yyyy-MM-dd') + 'T18:00:00' : '';
+
+    const leaveRequestData = {
+      leaveType: leaveType,
+      leaveDate: formattedFromDate,
+      endDate: formattedToDate,
+      status: 'Pending',
+      empId: parseInt(empId),
+      reason: leaveReason, // Include reason in the request
     };
 
-    // Add the new leave request to the state
-    setEmployeeLeaves([...employeeLeaves, newLeaveRequest]);
+    try {
+      const response = await axios.post('http://localhost:8080/leaves/postemployeleaves', leaveRequestData);
+      console.log('Leave request successful:', response.data);
 
-    // Reset form fields
-    setLeaveType('');
-    setFromDate(undefined);
-    setToDate(undefined);
-    setLeaveReason('');
-    setAttachment(null);
+      const newLeaveRecord = {
+        id: response.data.lid,
+        type: response.data.leaveType,
+        startDate: format(new Date(response.data.leaveDate), 'yyyy-MM-dd'),
+        endDate: format(new Date(response.data.endDate), 'yyyy-MM-dd'),
+        status: response.data.status.charAt(0).toUpperCase() + response.data.status.slice(1).toLowerCase(),
+        reason: leaveReason, // Use local state since API doesn't return reason
+        approvedBy: 'Pending',
+      };
 
-    // Close the dialog
-    setIsRequestLeaveDialogOpen(false);
+      setEmployeeLeaves([...employeeLeaves, newLeaveRecord]);
 
-    // In a real application, you would send this data to the backend
-    console.log('New Leave Request:', newLeaveRequest);
+      toast({
+        title: "Leave Request Submitted",
+        description: "Your leave request has been sent for approval.",
+      });
+
+      // Reset form fields
+      setLeaveType('');
+      setFromDate(undefined);
+      setToDate(undefined);
+      setLeaveReason('');
+      setAttachment(null);
+
+      // Close the dialog
+      setIsRequestLeaveDialogOpen(false);
+
+      // Fetch updated leave history immediately after submitting a new request
+      await fetchLeaveHistory();
+
+    } catch (error) {
+      console.error('Error submitting leave request:', error);
+      toast({
+        title: "Error",
+        description: error.response?.data?.message || "Failed to submit leave request. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   return (
@@ -115,9 +201,9 @@ const Employeeleave = () => {
             <p className="text-gray-600">View and request your leaves</p>
           </div>
           <Button className="bg-blue-600 hover:bg-blue-700" onClick={() => setIsRequestLeaveDialogOpen(true)}>
-              <Plus className="h-4 w-4 mr-2" />
+            <Plus className="h-4 w-4 mr-2" />
             Request Leave
-            </Button>
+          </Button>
         </div>
 
         {/* Leave Balances */}
@@ -163,44 +249,46 @@ const Employeeleave = () => {
         </div>
           
         {/* Leave History */}
-          <Card>
+        <Card>
           <CardHeader>
             <CardTitle>Leave History</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {employeeLeaves.map((leave) => (
-                <div key={leave.id} className="flex items-center justify-between p-4 border rounded-lg hover:shadow-md transition-shadow">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-4">
-                <div>
-                        <h3 className="font-semibold">{leave.type}</h3>
-                        <p className="text-sm text-gray-600">
-                          {leave.startDate} to {leave.endDate}
-                        </p>
-                        <p className="text-sm text-gray-500">Reason: {leave.reason}</p>
+              {employeeLeaves.length === 0 ? (
+                <p className="text-gray-500">No leave records found.</p>
+              ) : (
+                employeeLeaves.map((leave) => (
+                  <div key={leave.id} className="flex items-center justify-between p-4 border rounded-lg hover:shadow-md transition-shadow">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-4">
+                        <div>
+                          <h3 className="font-semibold">{leave.type}</h3>
+                          <p className="text-sm text-gray-600">
+                            {leave.startDate} to {leave.endDate}
+                          </p>
+                          <p className="text-sm text-gray-500">Reason: {leave.reason || 'N/A'}</p>
+                        </div>
                       </div>
                     </div>
+                    <div className="flex items-center gap-3">
+                      <Badge 
+                        variant={
+                          leave.status === 'Approved' ? 'default' : 
+                          leave.status === 'Pending' ? 'secondary' : 
+                          leave.status === 'Rejected' ? 'destructive' : 'outline'
+                        }
+                      >
+                        {leave.status || 'Unknown'}
+                      </Badge>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <Badge 
-                      variant={
-                        leave.status === 'Approved' ? 'default' : 
-                        leave.status === 'Pending' ? 'secondary' : 'destructive'
-                      }
-                    >
-                      {leave.status}
-                    </Badge>
-                    <p className="text-sm text-gray-500">
-                      {leave.approvedBy}
-                    </p>
-                  </div>
-                </div>
-              ))}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+                ))
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Request Leave Dialog */}
       <Dialog open={isRequestLeaveDialogOpen} onOpenChange={setIsRequestLeaveDialogOpen}>
@@ -222,7 +310,6 @@ const Employeeleave = () => {
                   <SelectItem value="Casual Leave">Casual Leave</SelectItem>
                   <SelectItem value="Sick Leave">Sick Leave</SelectItem>
                   <SelectItem value="Unpaid Leave">Unpaid Leave</SelectItem>
-                  {/* Add more leave types as needed */}
                 </SelectContent>
               </Select>
             </div>
@@ -301,7 +388,7 @@ const Employeeleave = () => {
           </div>
           <div className="flex justify-end">
             <Button onClick={handleRequestLeave}>Apply Leave</Button>
-      </div>
+          </div>
         </DialogContent>
       </Dialog>
     </DashboardLayout>

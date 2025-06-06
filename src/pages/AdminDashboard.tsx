@@ -14,6 +14,29 @@ import {
   DollarSign,
   Clock
 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import axios from 'axios';
+import { toast } from '@/components/ui/use-toast';
+
+interface Employee {
+  id?: number; // Or empId, based on backend
+  empId?: number;
+  ename: string;
+  status?: string; // Assuming employee status is available
+  department?: string; // Assuming department is available
+  // Add other employee properties if needed
+}
+
+interface LeaveRequest {
+  id: number;
+  employee: string;
+  type: string;
+  startDate: string;
+  endDate: string;
+  days: number;
+  status: string;
+  reason: string;
+}
 
 const AdminDashboard = () => {
   const sidebarItems = [
@@ -26,6 +49,55 @@ const AdminDashboard = () => {
     { icon: DollarSign, label: 'Payroll', path: '/admin/payroll' },
     { icon: Settings, label: 'Settings', path: '/admin/settings' },
   ];
+
+  const [totalEmployees, setTotalEmployees] = useState<number | 'Loading...' | 'Error'>('Loading...');
+  const [activeEmployees, setActiveEmployees] = useState<number | 'Loading...' | 'Error'>('Loading...');
+  const [pendingLeaves, setPendingLeaves] = useState<number | 'Loading...' | 'Error'>('Loading...');
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setIsLoading(true);
+        const [employeesResponse, leavesResponse] = await Promise.all([
+          axios.get('http://localhost:8080/emps/getEmps'),
+          axios.get('http://localhost:8080/leaves/getAllLeaves'),
+        ]);
+
+        console.log('Fetched employees for admin dashboard:', employeesResponse.data);
+        console.log('Fetched leaves for admin dashboard:', leavesResponse.data);
+
+        const allEmployees: Employee[] = employeesResponse.data; // Assuming API returns Employee[]
+        const allLeaves: LeaveRequest[] = leavesResponse.data; // Assuming API returns LeaveRequest[]
+
+        // Calculate Total Employees
+        setTotalEmployees(allEmployees.length);
+
+        // Calculate Active Employees (assuming 'status' field exists in Employee and 'Active' indicates active)
+        const activeCount = allEmployees.filter(emp => emp.status?.toLowerCase() === 'active').length;
+        setActiveEmployees(activeCount);
+
+        // Calculate Pending Leaves
+        const pendingCount = allLeaves.filter(leave => leave.status.toLowerCase() === 'pending').length;
+        setPendingLeaves(pendingCount);
+
+      } catch (error) {
+        console.error('Error fetching data for admin dashboard:', error);
+        toast({
+          title: "Error",
+          description: "Failed to fetch dashboard data.",
+          variant: "destructive",
+        });
+        setTotalEmployees('Error');
+        setActiveEmployees('Error');
+        setPendingLeaves('Error');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
 
   return (
     <DashboardLayout>
@@ -50,7 +122,7 @@ const AdminDashboard = () => {
               <Users className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">234</div>
+              <div className="text-2xl font-bold">{totalEmployees}</div>
               <p className="text-xs text-muted-foreground">+12% from last month</p>
             </CardContent>
           </Card>
@@ -61,7 +133,7 @@ const AdminDashboard = () => {
               <Activity className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">218</div>
+              <div className="text-2xl font-bold">{activeEmployees}</div>
               <p className="text-xs text-muted-foreground">93% attendance rate</p>
             </CardContent>
           </Card>
@@ -72,7 +144,7 @@ const AdminDashboard = () => {
               <Calendar className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">12</div>
+              <div className="text-2xl font-bold">{pendingLeaves}</div>
               <p className="text-xs text-muted-foreground">Awaiting approval</p>
             </CardContent>
           </Card>
@@ -83,7 +155,7 @@ const AdminDashboard = () => {
               <DollarSign className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">$45,231</div>
+              <div className="text-2xl font-bold">--</div>
               <p className="text-xs text-muted-foreground">+20.1% from last month</p>
             </CardContent>
           </Card>
@@ -97,27 +169,7 @@ const AdminDashboard = () => {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                  <div className="flex-1">
-                    <p className="text-sm font-medium">John Doe submitted leave request</p>
-                    <p className="text-xs text-muted-foreground">2 hours ago</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                  <div className="flex-1">
-                    <p className="text-sm font-medium">New employee Sarah Wilson onboarded</p>
-                    <p className="text-xs text-muted-foreground">5 hours ago</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
-                  <div className="flex-1">
-                    <p className="text-sm font-medium">Performance review cycle started</p>
-                    <p className="text-xs text-muted-foreground">1 day ago</p>
-                  </div>
-                </div>
+                <p className="text-center text-gray-500">No recent activities data available.</p>
               </div>
             </CardContent>
           </Card>
@@ -128,26 +180,7 @@ const AdminDashboard = () => {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                <div className="flex justify-between items-center">
-                  <span className="text-sm font-medium">Engineering</span>
-                  <span className="text-sm text-muted-foreground">89 employees</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm font-medium">Marketing</span>
-                  <span className="text-sm text-muted-foreground">45 employees</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm font-medium">Sales</span>
-                  <span className="text-sm text-muted-foreground">67 employees</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm font-medium">HR</span>
-                  <span className="text-sm text-muted-foreground">12 employees</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm font-medium">Finance</span>
-                  <span className="text-sm text-muted-foreground">21 employees</span>
-                </div>
+                <p className="text-center text-gray-500">No department overview data available.</p>
               </div>
             </CardContent>
           </Card>
