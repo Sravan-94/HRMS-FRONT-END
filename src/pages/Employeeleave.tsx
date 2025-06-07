@@ -45,6 +45,13 @@ const Employeeleave = () => {
   const [toDate, setToDate] = useState<Date | undefined>(undefined);
   const [leaveReason, setLeaveReason] = useState('');
   const [attachment, setAttachment] = useState<File | null>(null);
+  const [dateRange, setDateRange] = useState<{
+    from: Date | null;
+    to: Date | null;
+  }>({
+    from: null,
+    to: null,
+  });
 
   // Mock data for leave balances - typically fetched from backend as well
   const leaveBalances = {
@@ -75,6 +82,11 @@ const Employeeleave = () => {
         reason: leave.reason || 'N/A', // API response might not have reason, so fallback to 'N/A'
         approvedBy: leave.status.toLowerCase() === 'pending' ? (leave.approvedBy || 'Pending') : (leave.approvedBy || '-'), // Set approvedBy based on status
       }));
+
+      // Sort leaves by startDate in descending order (latest first)
+      fetchedLeaves.sort((a, b) => {
+        return new Date(b.startDate).getTime() - new Date(a.startDate).getTime();
+      });
 
       // Only update state if the data has changed to prevent unnecessary re-renders
       if (JSON.stringify(fetchedLeaves) !== JSON.stringify(employeeLeaves)) {
@@ -191,6 +203,18 @@ const Employeeleave = () => {
     }
   };
 
+  // Filter function for leave records
+  const getFilteredLeaves = () => {
+    if (!dateRange.from || !dateRange.to) {
+      return employeeLeaves; // Return all leaves if no date range is set
+    }
+    return employeeLeaves.filter(leave => {
+      const leaveStartDate = new Date(leave.startDate);
+      const leaveEndDate = new Date(leave.endDate);
+      return leaveStartDate >= dateRange.from! && leaveEndDate <= dateRange.to!;
+    });
+  };
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -251,14 +275,71 @@ const Employeeleave = () => {
         {/* Leave History */}
         <Card>
           <CardHeader>
-            <CardTitle>Leave History</CardTitle>
+            <div className="flex justify-between items-center">
+              <CardTitle>Leave History</CardTitle>
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" className="w-[180px] justify-start text-left font-normal">
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {dateRange.from ? format(dateRange.from, "MMM dd") : "From date"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0">
+                      <Calendar
+                        mode="single"
+                        selected={dateRange.from || undefined}
+                        onSelect={(date: Date | undefined) => {
+                          setDateRange(prev => ({ ...prev, from: date || null }));
+                        }}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                  <span className="text-gray-500">to</span>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" className="w-[180px] justify-start text-left font-normal">
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {dateRange.to ? format(dateRange.to, "MMM dd") : "To date"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0">
+                      <Calendar
+                        mode="single"
+                        selected={dateRange.to || undefined}
+                        onSelect={(date: Date | undefined) => {
+                          setDateRange(prev => ({ ...prev, to: date || null }));
+                        }}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+                <Button
+                  variant="outline"
+                  onClick={() => setDateRange({ from: new Date(), to: new Date() })}
+                >
+                  Today
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setDateRange({ from: null, to: null });
+                  }}
+                >
+                  Clear Filters
+                </Button>
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {employeeLeaves.length === 0 ? (
-                <p className="text-gray-500">No leave records found.</p>
+              {getFilteredLeaves().length === 0 ? (
+                <p className="text-gray-500">No leave records found for the selected date range.</p>
               ) : (
-                employeeLeaves.map((leave) => (
+                getFilteredLeaves().map((leave) => (
                   <div key={leave.id} className="flex items-center justify-between p-4 border rounded-lg hover:shadow-md transition-shadow">
                     <div className="flex-1">
                       <div className="flex items-center gap-4">

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -35,10 +35,21 @@ import { Label } from '@/components/ui/label';
 import axios from 'axios';
 import { useToast } from '@/hooks/use-toast';
 
+interface Employee {
+  empId: number;
+  ename: string;
+  email: string;
+  password: string | null;
+  phone: number | null;
+  role: string | null;
+}
+
 const EmployeeManagement = () => {
   const storedUserRole = localStorage.getItem('userRole') || 'employee';
   const userRole = storedUserRole.toLowerCase(); // Convert to lowercase
   const { toast } = useToast();
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   
   const getSidebarItems = () => {
     const baseItems = [
@@ -64,13 +75,42 @@ const EmployeeManagement = () => {
     return baseItems;
   };
 
-  const [employees, setEmployees] = useState([
-    { id: 1, name: 'John Doe', email: 'john@company.com', department: 'Engineering', position: 'Senior Developer', status: 'Active' },
-    { id: 2, name: 'Sarah Wilson', email: 'sarah@company.com', department: 'Marketing', position: 'Marketing Manager', status: 'Active' },
-    { id: 3, name: 'Mike Johnson', email: 'mike@company.com', department: 'Sales', position: 'Sales Representative', status: 'Active' },
-    { id: 4, name: 'Emily Davis', email: 'emily@company.com', department: 'HR', position: 'HR Specialist', status: 'On Leave' },
-    { id: 5, name: 'Robert Brown', email: 'robert@company.com', department: 'Finance', position: 'Financial Analyst', status: 'Active' },
-  ]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
+
+  useEffect(() => {
+    fetchEmployees();
+  }, []);
+
+  const fetchEmployees = async () => {
+    try {
+      setIsLoading(true);
+      const response = await axios.get('http://localhost:8080/emps/getEmps');
+      console.log('API Response:', response.data);
+      
+      // Transform the API response to match our employee structure
+      const transformedEmployees = response.data.map(emp => ({
+        empId: emp.empId,
+        ename: emp.ename,
+        email: emp.email,
+        password: emp.password,
+        phone: emp.phone,
+        role: emp.role
+      }));
+
+      setEmployees(transformedEmployees);
+      setError(null);
+    } catch (error) {
+      console.error('Error fetching employees:', error);
+      setError('Failed to fetch employees. Please try again later.');
+      toast({
+        title: "Error",
+        description: "Failed to fetch employees",
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const [isAddEmployeeModalOpen, setIsAddEmployeeModalOpen] = useState(false);
   const [newEmployeeName, setNewEmployeeName] = useState('');
@@ -118,13 +158,12 @@ const EmployeeManagement = () => {
       setEmployees(prevEmployees => [
         ...prevEmployees,
         {
-          id: addedEmployee.empId,
-          name: addedEmployee.ename,
+          empId: addedEmployee.empId,
+          ename: addedEmployee.ename,
           email: addedEmployee.email,
-          employeeid: addedEmployee.employeeid,
-          department: addedEmployee.department || 'Not Assigned',
-          position: addedEmployee.position || 'Pending',
-          status: addedEmployee.status || 'Active',
+          password: addedEmployee.password,
+          phone: addedEmployee.phone,
+          role: addedEmployee.role
         }
       ]);
 
@@ -192,41 +231,51 @@ const EmployeeManagement = () => {
             <CardTitle>All Employees ({employees.length})</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {employees.map((employee) => (
-                <div key={employee.id} className="flex items-center justify-between p-4 border rounded-lg hover:shadow-md transition-shadow">
-                  <div className="flex items-center gap-4">
-                    <Avatar>
-                      <AvatarImage src="" />
-                      <AvatarFallback className="bg-blue-600 text-white">
-                        {employee.name.split(' ').map(n => n[0]).join('')}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div>
-                      <h3 className="font-semibold">{employee.name}</h3>
-                      <p className="text-sm text-gray-600">{employee.email}</p>
-                      <p className="text-sm text-gray-500">ID: {employee.employeeid}</p>
-                      <p className="text-sm text-gray-500">{employee.department} • {employee.position}</p>
+            {isLoading ? (
+              <div className="flex justify-center items-center p-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+              </div>
+            ) : error ? (
+              <div className="text-center text-red-600 p-4">{error}</div>
+            ) : (
+              <div className="space-y-4">
+                {employees.map((employee) => (
+                  <div key={employee.empId} className="flex items-center justify-between p-4 border rounded-lg hover:shadow-md transition-shadow">
+                    <div className="flex items-center gap-4">
+                      <Avatar>
+                        <AvatarImage src="" />
+                        <AvatarFallback className="bg-blue-600 text-white">
+                          {employee.ename.split(' ').map(n => n[0]).join('')}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <h3 className="font-semibold">{employee.ename}</h3>
+                        <p className="text-sm text-gray-600">{employee.email}</p>
+                        <p className="text-sm text-gray-500">ID: {employee.empId}</p>
+                        <p className="text-sm text-gray-500">
+                          {employee.phone ? `Phone: ${employee.phone}` : 'No phone number'}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <Badge variant={employee.status === 'Active' ? 'default' : 'secondary'}>
-                      {employee.status}
-                    </Badge>
-                    <div className="flex gap-2">
-                      <Button size="sm" variant="outline">
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                      {canManageEmployees && (
+                    <div className="flex items-center gap-3">
+                      <Badge variant={employee.role ? 'default' : 'secondary'}>
+                        {employee.role || 'No Role'}
+                      </Badge>
+                      {/* <div className="flex gap-2">
                         <Button size="sm" variant="outline">
-                          <Edit className="h-4 w-4" />
+                          <Eye className="h-4 w-4" />
                         </Button>
-                      )}
+                        {canManageEmployees && (
+                          <Button size="sm" variant="outline">
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div> */}
                     </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

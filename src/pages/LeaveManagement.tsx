@@ -17,10 +17,27 @@ import {
   Check,
   X,
   ClipboardList,
-  Loader2
+  Loader2,
+  Search,
+  CalendarIcon
 } from 'lucide-react';
 import axios from 'axios';
 import { toast } from '@/components/ui/use-toast';
+import { format } from "date-fns";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Calendar as UiCalendar } from "@/components/ui/calendar";
 
 interface LeaveRequest {
   id: number;
@@ -44,6 +61,15 @@ const LeaveManagement = () => {
   const [employees, setEmployees] = useState<Employee[]>([]); // State to store employee list
   const [isLoading, setIsLoading] = useState(true);
   const [isActionLoading, setIsActionLoading] = useState<number | null>(null);
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [dateRange, setDateRange] = useState<{
+    from: Date | undefined;
+    to: Date | undefined;
+  }>({
+    from: undefined,
+    to: undefined,
+  });
+  const [searchQuery, setSearchQuery] = useState('');
   
   const getSidebarItems = () => {
     return [
@@ -119,7 +145,28 @@ const LeaveManagement = () => {
         });
 
       console.log('Final transformed leaves:', transformedLeaves);
-      setLeaveRequests(transformedLeaves);
+      
+      // Sort leaves: Pending first, then Approved, then Rejected
+      const sortedLeaves = transformedLeaves.sort((a, b) => {
+        const statusOrder: { [key: string]: number } = {
+          'pending': 1,
+          'approved': 2,
+          'rejected': 3,
+        };
+        
+        const statusA = a.status.toLowerCase();
+        const statusB = b.status.toLowerCase();
+
+        // Sort primarily by status order
+        if (statusOrder[statusA] < statusOrder[statusB]) return -1;
+        if (statusOrder[statusA] > statusOrder[statusB]) return 1;
+
+        // If statuses are the same, maintain existing sort (e.g., by date if previously sorted)
+        // Currently sorted by startDate descending, let's keep that as secondary sort
+        return new Date(b.startDate).getTime() - new Date(a.startDate).getTime();
+      });
+
+      setLeaveRequests(sortedLeaves);
     } catch (error) {
       console.error('Error fetching data:', error);
       toast({
@@ -207,6 +254,37 @@ const LeaveManagement = () => {
     }
   };
 
+  // Filter function
+  const getFilteredLeaves = () => {
+    return leaveRequests.filter(leave => {
+      // Status filter
+      if (statusFilter !== 'all' && leave.status.toLowerCase() !== statusFilter.toLowerCase()) {
+        return false;
+      }
+
+      // Date range filter
+      if (dateRange.from && dateRange.to) {
+        const leaveStartDate = new Date(leave.startDate);
+        const leaveEndDate = new Date(leave.endDate);
+        if (leaveStartDate < dateRange.from || leaveEndDate > dateRange.to) {
+          return false;
+        }
+      }
+
+      // Search query filter
+      if (searchQuery) {
+        const query = searchQuery.toLowerCase();
+        return (
+          leave.employee.toLowerCase().includes(query) ||
+          leave.type.toLowerCase().includes(query) ||
+          leave.reason.toLowerCase().includes(query)
+        );
+      }
+
+      return true;
+    });
+  };
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -217,6 +295,98 @@ const LeaveManagement = () => {
             <p className="text-gray-600">Manage employee leave requests and balances</p>
           </div>
         </div>
+
+        {/* Filters Section */}
+        <Card>
+          <CardContent className="p-6">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              {/* Status Filter */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Status</label>
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Filter by status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Status</SelectItem>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="approved">Approved</SelectItem>
+                    <SelectItem value="rejected">Rejected</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Date Range Filter */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Date Range</label>
+                <div className="flex gap-2">
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" className="w-full justify-start text-left font-normal">
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {dateRange.from ? format(dateRange.from, "PPP") : "From date"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0">
+                      <UiCalendar
+                        mode="single"
+                        selected={dateRange.from}
+                        onSelect={(date: Date | undefined) => setDateRange(prev => ({ ...prev, from: date }))}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" className="w-full justify-start text-left font-normal">
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {dateRange.to ? format(dateRange.to, "PPP") : "To date"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0">
+                      <UiCalendar
+                        mode="single"
+                        selected={dateRange.to}
+                        onSelect={(date: Date | undefined) => setDateRange(prev => ({ ...prev, to: date }))}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+              </div>
+
+              {/* Search Filter */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Search</label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                  <Input
+                    placeholder="Search by name, type, or reason"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
+              </div>
+
+              {/* Clear Filters Button */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium opacity-0">Clear</label>
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => {
+                    setStatusFilter('all');
+                    setDateRange({ from: undefined, to: undefined });
+                    setSearchQuery('');
+                  }}
+                >
+                  Clear Filters
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
@@ -290,62 +460,60 @@ const LeaveManagement = () => {
               </div>
             ) : (
               <div className="space-y-4">
-                {leaveRequests
-                  .filter(request => request.id != null) // Filter out requests with null IDs
-                  .map((request) => (
-                    <div 
-                      key={`leave-${request.id}-${request.employee}`} 
-                      className="flex items-center justify-between p-4 border rounded-lg hover:shadow-md transition-shadow"
-                    >
-                      <div className="flex items-center gap-4">
-                        <Avatar>
-                          <AvatarFallback className="bg-blue-600 text-white">
-                            {/* Display the first two initials of the employee name */}
-                            {request.employee.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <h3 className="font-semibold">{request.employee}</h3>
-                          <p className="text-sm text-gray-600">{request.type} • {request.days} day(s)</p>
-                          <p className="text-sm text-gray-500">{request.startDate} to {request.endDate}</p>
-                          <p className="text-sm text-gray-500 italic">"{request.reason}"</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <Badge className={getStatusColor(request.status)}>
-                          {request.status}
-                        </Badge>
-                        {request.status.toLowerCase() === 'pending' && (
-                          <div className="flex gap-2">
-                            <Button
-                              size="sm"
-                              className="bg-green-600 hover:bg-green-700"
-                              onClick={() => handleAccept(request.id)}
-                              disabled={isActionLoading === request.id}
-                            >
-                              {isActionLoading === request.id ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                              ) : (
-                                'Accept'
-                              )}
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="destructive"
-                              onClick={() => handleReject(request.id)}
-                              disabled={isActionLoading === request.id}
-                            >
-                              {isActionLoading === request.id ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                              ) : (
-                                'Reject'
-                              )}
-                            </Button>
-                          </div>
-                        )}
+                {getFilteredLeaves().map((request) => (
+                  <div 
+                    key={`leave-${request.id}-${request.employee}`} 
+                    className="flex items-center justify-between p-4 border rounded-lg hover:shadow-md transition-shadow"
+                  >
+                    <div className="flex items-center gap-4">
+                      <Avatar>
+                        <AvatarFallback className="bg-blue-600 text-white">
+                          {/* Display the first two initials of the employee name */}
+                          {request.employee.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <h3 className="font-semibold">{request.employee}</h3>
+                        <p className="text-sm text-gray-600">{request.type} • {request.days} day(s)</p>
+                        <p className="text-sm text-gray-500">{request.startDate} to {request.endDate}</p>
+                        <p className="text-sm text-gray-500 italic">"{request.reason}"</p>
                       </div>
                     </div>
-                  ))}
+                    <div className="flex items-center gap-3">
+                      <Badge className={getStatusColor(request.status)}>
+                        {request.status}
+                      </Badge>
+                      {request.status.toLowerCase() === 'pending' && (
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            className="bg-green-600 hover:bg-green-700"
+                            onClick={() => handleAccept(request.id)}
+                            disabled={isActionLoading === request.id}
+                          >
+                            {isActionLoading === request.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              'Accept'
+                            )}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => handleReject(request.id)}
+                            disabled={isActionLoading === request.id}
+                          >
+                            {isActionLoading === request.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              'Reject'
+                            )}
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </CardContent>

@@ -15,11 +15,28 @@ import {
   DollarSign,
   CheckCircle,
   XCircle,
-  ClipboardList
+  ClipboardList,
+  Search,
+  CalendarIcon
 } from 'lucide-react';
 import axios from 'axios';
 import { toast } from "@/components/ui/use-toast";
 import dayjs from 'dayjs';
+import { Input } from "@/components/ui/input";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { format } from "date-fns";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Calendar as UiCalendar } from "@/components/ui/calendar";
 
 interface AttendanceRecord {
   id: number;
@@ -41,6 +58,9 @@ const Attendance = () => {
   const userRole = localStorage.getItem('userRole')?.toLowerCase() || 'employee';
   const [attendanceData, setAttendanceData] = useState<AttendanceRecord[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [dateFilter, setDateFilter] = useState<Date | undefined>(undefined);
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     if (userRole === 'admin' || userRole === 'hr') {
@@ -178,9 +198,17 @@ const Attendance = () => {
   };
 
   const formatDuration = (seconds: number) => {
+    if (!seconds || seconds <= 0) return '-';
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
     return `${hours}h ${minutes}m`;
+  };
+
+  const calculateDuration = (clockIn: string | null, clockOut: string | null) => {
+    if (!clockIn || !clockOut) return 0;
+    const start = dayjs(clockIn);
+    const end = dayjs(clockOut);
+    return end.diff(start, 'second');
   };
 
   // Calculate attendance statistics with null checks
@@ -189,6 +217,36 @@ const Attendance = () => {
   const absentCount = attendanceData.filter(a => (a.status || '').toLowerCase() === 'absent').length;
   const totalEmployees = attendanceData.length;
   const attendanceRate = totalEmployees > 0 ? Math.round((presentCount / totalEmployees) * 100) : 0;
+
+  // Filter function
+  const getFilteredAttendance = () => {
+    return attendanceData.filter(record => {
+      // Status filter
+      if (statusFilter !== 'all' && record.status.toLowerCase() !== statusFilter.toLowerCase()) {
+        return false;
+      }
+
+      // Date filter
+      if (dateFilter) {
+        const recordDate = dayjs(record.date).format('YYYY-MM-DD');
+        const filterDate = dayjs(dateFilter).format('YYYY-MM-DD');
+        if (recordDate !== filterDate) {
+          return false;
+        }
+      }
+
+      // Search query filter
+      if (searchQuery) {
+        const query = searchQuery.toLowerCase();
+        return (
+          record.employee.name.toLowerCase().includes(query) ||
+          record.employee.email.toLowerCase().includes(query)
+        );
+      }
+
+      return true;
+    });
+  };
 
   return (
     <DashboardLayout>
@@ -212,6 +270,84 @@ const Attendance = () => {
             </div>
           )}
         </div>
+
+        {/* Filters Section */}
+        <Card>
+          <CardContent className="p-6">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              {/* Status Filter */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Status</label>
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Filter by status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Status</SelectItem>
+                    <SelectItem value="present">Present</SelectItem>
+                    <SelectItem value="late">Late</SelectItem>
+                    <SelectItem value="absent">Absent</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Date Filter */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Date</label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className="w-full justify-start text-left font-normal">
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {dateFilter ? format(dateFilter, "PPP") : "Select date"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0">
+                    <Calendar
+                      mode="single"
+                      selected={dateFilter}
+                      onSelect={(date: Date | undefined) => {
+                        if (date instanceof Date) {
+                          setDateFilter(date);
+                        }
+                      }}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+
+              {/* Search Filter */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Search</label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                  <Input
+                    placeholder="Search by name or email"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
+              </div>
+
+              {/* Clear Filters Button */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium opacity-0">Clear</label>
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => {
+                    setStatusFilter('all');
+                    setDateFilter(undefined);
+                    setSearchQuery('');
+                  }}
+                >
+                  Clear Filters
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
@@ -264,82 +400,83 @@ const Attendance = () => {
           </Card>
         </div>
 
-        {/* Today's Attendance */}
+        {/* Attendance List */}
         <Card>
           <CardHeader>
-            <CardTitle>Today's Attendance - {dayjs().format('MMMM DD, YYYY')}</CardTitle>
+            <CardTitle>Attendance Records</CardTitle>
           </CardHeader>
           <CardContent>
             {isLoading ? (
-              <div className="text-center py-4">Loading attendance records...</div>
-            ) : attendanceData.length > 0 ? (
-              <div className="space-y-4">
-                {attendanceData.map((record) => {
-                   console.log('Rendering record:', record);
-                   return (
-                  <div key={`${record.id}-${record.employee?.id}`} className="flex items-center justify-between p-4 border rounded-lg hover:shadow-md transition-shadow">
-                    <div className="flex items-center gap-4">
-                      <Avatar>
-                        <AvatarFallback className="bg-blue-600 text-white">
-                          {(record.employee?.name || 'NA').split(' ').map(n => n[0]).join('')}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div>
-                        <h3 className="font-semibold">{record.employee?.name || 'Unknown Employee'}</h3>
-                        <div className="flex items-center gap-4 text-sm text-gray-600">
-                          <span>Check In: {record.clockIn ? formatDateTime(record.clockIn) : '-'}</span>
-                          <span>Check Out: {record.clockOut ? formatDateTime(record.clockOut) : '-'}</span>
-                          <span>Hours: {record.duration ? formatDuration(record.duration) : '-'}</span>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <Badge className={getStatusColor(record.status)}>
-                        <span className="flex items-center gap-1">
-                          {getStatusIcon(record.status)}
-                          {record.status}
-                        </span>
-                      </Badge>
-                    </div>
-                    {/* Login and Logout Selfies */}
-                    {(record.loginImage || record.logoutImage) && (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                        <div>
-                          <p className="text-sm font-medium text-gray-600 mb-2">Login Selfie</p>
-                          {record.loginImage ? (
-                            <img
-                              src={record.loginImage}
-                              alt={`Login Selfie ${record.employee?.name || 'Employee'}`}
-                              className="w-16 h-16 mx-auto rounded-full object-cover shadow-md"
-                            />
-                          ) : (
-                            <div className="w-16 h-16 mx-auto rounded-full bg-gray-100 flex items-center justify-center text-gray-400">
-                              No Image
-                            </div>
-                          )}
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium text-gray-600 mb-2">Logout Selfie</p>
-                          {record.logoutImage ? (
-                            <img
-                              src={record.logoutImage}
-                              alt={`Logout Selfie ${record.employee?.name || 'Employee'}`}
-                              className="w-16 h-16 mx-auto rounded-full object-cover shadow-md"
-                            />
-                          ) : (
-                            <div className="w-16 h-16 mx-auto rounded-full bg-gray-100 flex items-center justify-center text-gray-400">
-                              No Image
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                 );
-                })}
+              <div className="flex justify-center items-center p-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
               </div>
             ) : (
-              <div className="text-center py-4 text-gray-500">No attendance records found for today.</div>
+              <div className="space-y-4">
+                {getFilteredAttendance().map((record) => {
+                  const duration = calculateDuration(record.clockIn, record.clockOut);
+                  console.log('Rendering record:', record);
+                  return (
+                    <div key={`${record.id}-${record.employee?.id}`} className="flex items-center justify-between p-4 border rounded-lg hover:shadow-md transition-shadow">
+                      <div className="flex items-center gap-4">
+                        <Avatar>
+                          <AvatarFallback className="bg-blue-600 text-white">
+                            {(record.employee?.name || 'NA').split(' ').map(n => n[0]).join('')}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <h3 className="font-semibold">{record.employee?.name || 'Unknown Employee'}</h3>
+                          <div className="flex items-center gap-4 text-sm text-gray-600">
+                            <span>Check In: {record.clockIn ? formatDateTime(record.clockIn) : '-'}</span>
+                            <span>Check Out: {record.clockOut ? formatDateTime(record.clockOut) : '-'}</span>
+                            <span>Hours: {formatDuration(duration)}</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <Badge className={getStatusColor(record.status)}>
+                          <span className="flex items-center gap-1">
+                            {getStatusIcon(record.status)}
+                            {record.status}
+                          </span>
+                        </Badge>
+                      </div>
+                      {/* Login and Logout Selfies */}
+                      {(record.loginImage || record.logoutImage) && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                          <div>
+                            <p className="text-sm font-medium text-gray-600 mb-2">Login Selfie</p>
+                            {record.loginImage ? (
+                              <img
+                                src={record.loginImage}
+                                alt={`Login Selfie ${record.employee?.name || 'Employee'}`}
+                                className="w-16 h-16 mx-auto rounded-full object-cover shadow-md"
+                              />
+                            ) : (
+                              <div className="w-16 h-16 mx-auto rounded-full bg-gray-100 flex items-center justify-center text-gray-400">
+                                No Image
+                              </div>
+                            )}
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-gray-600 mb-2">Logout Selfie</p>
+                            {record.logoutImage ? (
+                              <img
+                                src={record.logoutImage}
+                                alt={`Logout Selfie ${record.employee?.name || 'Employee'}`}
+                                className="w-16 h-16 mx-auto rounded-full object-cover shadow-md"
+                              />
+                            ) : (
+                              <div className="w-16 h-16 mx-auto rounded-full bg-gray-100 flex items-center justify-center text-gray-400">
+                                No Image
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             )}
           </CardContent>
         </Card>

@@ -14,6 +14,10 @@ import {
 } from "@/components/ui/dialog";
 import axios from 'axios';
 import { toast } from "@/components/ui/use-toast";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { format } from "date-fns";
+import { CalendarIcon } from "lucide-react";
 
 interface AttendanceRecord {
   id: number;
@@ -90,6 +94,7 @@ const AttendancePage: React.FC = () => {
     return savedRecord ? JSON.parse(savedRecord) : null;
   });
   const [isLoading, setIsLoading] = useState(true);
+  const [dateFilter, setDateFilter] = useState<Date>(new Date());
 
   const todayKey = dayjs().format('YYYY-MM-DD');
   const userEmail = localStorage.getItem('userEmail');
@@ -523,6 +528,15 @@ const AttendancePage: React.FC = () => {
 
   console.log('Filtered historical records:', historicalRecords);
 
+  // Filter function for attendance records
+  const getFilteredAttendance = () => {
+    return attendanceHistory.filter(record => {
+      const recordDate = dayjs(record.date).format('YYYY-MM-DD');
+      const filterDate = dayjs(dateFilter).format('YYYY-MM-DD');
+      return recordDate === filterDate;
+    });
+  };
+
   return (
     <DashboardLayout>
       {isLoading ? (
@@ -672,12 +686,51 @@ const AttendancePage: React.FC = () => {
 
           <Card>
             <CardHeader>
-              <CardTitle>Previous Attendance Records</CardTitle>
+              <div className="flex justify-between items-center">
+                <CardTitle>Previous Attendance Records</CardTitle>
+                <div className="flex items-center gap-4">
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" className="w-[240px] justify-start text-left font-normal">
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {format(dateFilter, "PPP")}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0">
+                      <Calendar
+                        mode="single"
+                        selected={dateFilter}
+                        onSelect={(date: Date | undefined) => {
+                          if (date instanceof Date) {
+                            setDateFilter(date);
+                          }
+                        }}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                  <Button
+                    variant="outline"
+                    onClick={() => setDateFilter(new Date())}
+                  >
+                    Today
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setDateFilter(new Date());
+                      // Reset any other filters if they exist
+                    }}
+                  >
+                    Clear Filters
+                  </Button>
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
-              {historicalRecords.length > 0 ? (
+              {getFilteredAttendance().length > 0 ? (
                 <div className="space-y-6">
-                  {historicalRecords.map((record) => (
+                  {getFilteredAttendance().map((record) => (
                     <div key={record.id} className="flex flex-col p-4 border rounded-lg shadow-sm">
                       <div className="flex justify-between items-center mb-4">
                         <span className="text-lg font-semibold text-gray-800">
@@ -740,7 +793,7 @@ const AttendancePage: React.FC = () => {
                 </div>
               ) : (
                 <div className="text-center py-8">
-                  <p className="text-gray-500">No previous attendance records found.</p>
+                  <p className="text-gray-500">No attendance records found for {format(dateFilter, "MMMM dd, yyyy")}.</p>
                   <p className="text-sm text-gray-400 mt-2">Your attendance history will appear here after you log in and out.</p>
                 </div>
               )}
