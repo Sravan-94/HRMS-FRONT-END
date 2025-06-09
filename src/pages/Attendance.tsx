@@ -37,6 +37,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Calendar as UiCalendar } from "@/components/ui/calendar";
+import { base_url } from '@/utils/config';
 
 interface AttendanceRecord {
   id: number;
@@ -62,10 +63,11 @@ const Attendance = () => {
   const [dateFilter, setDateFilter] = useState<Date | undefined>(undefined);
   const [searchQuery, setSearchQuery] = useState('');
 
+
   useEffect(() => {
     if (userRole === 'admin' || userRole === 'hr') {
       setIsLoading(true);
-      axios.get('http://localhost:8080/api/attendance/all')
+      axios.get(`${base_url}/api/attendance/all`)
         .then(response => {
           console.log('Raw API response:', JSON.stringify(response.data, null, 2));
           

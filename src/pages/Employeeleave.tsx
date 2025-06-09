@@ -23,6 +23,7 @@ import { cn } from "@/lib/utils";
 import axios from 'axios';
 import { toast } from '@/components/ui/use-toast';
 import { useLocation } from 'react-router-dom';
+import { base_url } from '@/utils/config';
 
 interface LeaveRecord {
   id: number;
@@ -35,8 +36,8 @@ interface LeaveRecord {
 }
 
 const Employeeleave = () => {
-  const empId = localStorage.getItem('empId'); // Use empId from localStorage
-  const location = useLocation(); // Get the current location
+  const empId = localStorage.getItem('empId');
+  const location = useLocation();
 
   const [employeeLeaves, setEmployeeLeaves] = useState<LeaveRecord[]>([]);
   const [isRequestLeaveDialogOpen, setIsRequestLeaveDialogOpen] = useState(false);
@@ -67,7 +68,7 @@ const Employeeleave = () => {
       return;
     }
     try {
-      const response = await axios.get(`http://localhost:8080/leaves/employee/${empId}`);
+      const response = await axios.get(`${base_url}/leaves/employee/${empId}`);
       console.log('Leave history fetched at', new Date().toLocaleString(), ':', response.data);
       console.log('Fetched leave statuses:', response.data.map((leave: any) => ({
         id: leave.lid,
@@ -160,7 +161,7 @@ const Employeeleave = () => {
     };
 
     try {
-      const response = await axios.post('http://localhost:8080/leaves/postemployeleaves', leaveRequestData);
+      const response = await axios.post(`${base_url}/leaves/postemployeleaves`, leaveRequestData);
       console.log('Leave request successful:', response.data);
 
       const newLeaveRecord = {

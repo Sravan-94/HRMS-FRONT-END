@@ -34,6 +34,7 @@ import {
 import { Label } from '@/components/ui/label';
 import axios from 'axios';
 import { useToast } from '@/hooks/use-toast';
+import { base_url } from '@/utils/config';
 
 interface Employee {
   empId: number;
@@ -84,7 +85,7 @@ const EmployeeManagement = () => {
   const fetchEmployees = async () => {
     try {
       setIsLoading(true);
-      const response = await axios.get('http://localhost:8080/emps/getEmps');
+      const response = await axios.get(`${base_url}/emps/getEmps`);
       console.log('API Response:', response.data);
       
       // Transform the API response to match our employee structure
@@ -142,7 +143,7 @@ const EmployeeManagement = () => {
     }
 
     try {
-      const response = await axios.post('http://localhost:8080/emps/saveEmp', {
+      const response = await axios.post(`${base_url}/emps/saveEmp`, {
         ename: newEmployeeName,
         email: newEmployeeEmail,
         phone: Number(newEmployeePhone),

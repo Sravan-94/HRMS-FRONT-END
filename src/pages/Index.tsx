@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/hooks/use-toast';
 import { Building2, Users, UserCheck, User } from 'lucide-react';
 import axios from 'axios';
+import { base_url } from '@/utils/config';
 
 const Index = () => {
   const [email, setEmail] = useState('');
@@ -28,7 +29,7 @@ const Index = () => {
     }
 
     try {
-      const response = await axios.post('http://localhost:8080/emps/login', {
+      const response = await axios.post(`${base_url}/emps/login`, {
         email,
         password
       });

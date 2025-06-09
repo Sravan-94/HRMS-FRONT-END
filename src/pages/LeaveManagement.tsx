@@ -38,6 +38,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Calendar as UiCalendar } from "@/components/ui/calendar";
+import { base_url } from '@/utils/config';
 
 interface LeaveRequest {
   id: number;
@@ -87,7 +88,7 @@ const LeaveManagement = () => {
   // Fetch all employees
   const fetchAllEmployees = async () => {
     try {
-      const response = await axios.get('http://localhost:8080/emps/getEmps');
+      const response = await axios.get(`${base_url}/emps/getEmps`);
       console.log('Fetched employees:', response.data);
       // Assuming the API returns an array of employee objects with empId and ename
       setEmployees(response.data);
@@ -107,8 +108,8 @@ const LeaveManagement = () => {
     try {
       // Fetch leaves and employees concurrently
       const [leavesResponse, employeesResponse] = await Promise.all([
-        axios.get('http://localhost:8080/leaves/getAllLeaves'),
-        axios.get('http://localhost:8080/emps/getEmps') // Fetch employees here as well
+        axios.get(`${base_url}/leaves/getAllLeaves`),
+        axios.get(`${base_url}/emps/getEmps`) // Fetch employees here as well
       ]);
 
       console.log('Raw leaves data:', leavesResponse.data);
@@ -202,7 +203,7 @@ const LeaveManagement = () => {
     try {
       setIsActionLoading(id);
       // Assuming the backend expects a PUT request with the status in the body
-      const response = await axios.put(`http://localhost:8080/leaves/${id}/accept`, { status: 'Approved' });
+      const response = await axios.put(`${base_url}/leaves/${id}/accept`, { status: 'Approved' });
       console.log('Leave accepted:', response.data);
       
       // Update the local state with the new status
@@ -230,7 +231,7 @@ const LeaveManagement = () => {
     try {
       setIsActionLoading(id);
       // Assuming the backend expects a PUT request with the status in the body
-      const response = await axios.put(`http://localhost:8080/leaves/${id}/reject`, { status: 'Rejected' });
+      const response = await axios.put(`${base_url}/leaves/${id}/reject`, { status: 'Rejected' });
       console.log('Leave rejected:', response.data);
       
       // Update the local state with the new status

@@ -17,6 +17,7 @@ import {
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { toast } from '@/components/ui/use-toast';
+import { base_url } from '@/utils/config';
 
 interface Employee {
   id?: number; // Or empId, based on backend
@@ -60,8 +61,8 @@ const AdminDashboard = () => {
       try {
         setIsLoading(true);
         const [employeesResponse, leavesResponse] = await Promise.all([
-          axios.get('http://localhost:8080/emps/getEmps'),
-          axios.get('http://localhost:8080/leaves/getAllLeaves'),
+          axios.get(`${base_url}/emps/getEmps`),
+          axios.get(`${base_url}/leaves/getAllLeaves`),
         ]);
 
         console.log('Fetched employees for admin dashboard:', employeesResponse.data);

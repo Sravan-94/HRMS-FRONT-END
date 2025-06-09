@@ -18,6 +18,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
 import { CalendarIcon } from "lucide-react";
+import { base_url } from '@/utils/config';
 
 interface AttendanceRecord {
   id: number;
@@ -145,7 +146,7 @@ const AttendancePage: React.FC = () => {
 
       try {
         console.log(`Fetching current status for empId: ${retrievedEmpId}`);
-        const response = await axios.get(`http://localhost:8080/api/attendance/current-status/${retrievedEmpId}`);
+        const response = await axios.get(`${base_url}/api/attendance/current-status/${retrievedEmpId}`);
         console.log('Current status API response:', response.data);
 
         const { isLoggedIn: apiLoggedIn, loginTime, loginImage, logoutTime, logoutImage, timeLeft, record } = response.data;
@@ -198,7 +199,7 @@ const AttendancePage: React.FC = () => {
 
       try {
         console.log(`Fetching attendance history for empId: ${retrievedEmpId}`);
-        const response = await axios.get(`http://localhost:8080/api/attendance/employee/${retrievedEmpId}?t=${Date.now()}`);
+        const response = await axios.get(`${base_url}/api/attendance/employee/${retrievedEmpId}?t=${Date.now()}`);
         console.log('Attendance history API response:', response.data);
 
         if (!Array.isArray(response.data)) {
@@ -286,7 +287,7 @@ const AttendancePage: React.FC = () => {
     if (isLoggedIn) {
       if (!currentDayRecord?.id) {
         try {
-          const response = await axios.get(`http://localhost:8080/api/attendance/current-status/${retrievedEmpId}`);
+          const response = await axios.get(`${base_url}/api/attendance/current-status/${retrievedEmpId}`);
           const { record } = response.data;
           if (record && record.date === todayKey && !record.clockOut) {
             setCurrentDayRecord(record);
@@ -327,7 +328,7 @@ const AttendancePage: React.FC = () => {
 
     const refreshHistory = async () => {
       try {
-        const response = await axios.get(`http://localhost:8080/api/attendance/employee/${retrievedEmpId}?t=${Date.now()}`);
+        const response = await axios.get(`${base_url}/api/attendance/employee/${retrievedEmpId}?t=${Date.now()}`);
         const updatedHistory: AttendanceRecord[] = response.data.map((record: any) => ({
           id: record.id,
           date: record.date ? dayjs(record.date).format('YYYY-MM-DD') : dayjs().format('YYYY-MM-DD'),
@@ -360,7 +361,7 @@ const AttendancePage: React.FC = () => {
       console.log('File being sent for check-in:', file);
       formData.append('file', file);
 
-      axios.post('http://localhost:8080/api/attendance/checkin', formData, {
+      axios.post(`${base_url}/api/attendance/checkin`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data'
         }
@@ -431,7 +432,7 @@ const AttendancePage: React.FC = () => {
       console.log('File being sent for check-out:', file);
       formData.append('file', file);
 
-      axios.post(`http://localhost:8080/api/attendance/checkout/${currentDayRecord.id}`, formData, {
+      axios.post(`${base_url}/api/attendance/checkout/${currentDayRecord.id}`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data'
         }

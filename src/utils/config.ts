@@ -1,0 +1,1 @@
+export const base_url = "https://hrms-backend-bpm6.onrender.com"; 
