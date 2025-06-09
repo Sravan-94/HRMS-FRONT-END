@@ -304,7 +304,7 @@ const Attendance = () => {
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent className="w-auto p-0">
-                    <Calendar
+                    <UiCalendar
                       mode="single"
                       selected={dateFilter}
                       onSelect={(date: Date | undefined) => {
