@@ -60,9 +60,14 @@ const Attendance = () => {
   const [attendanceData, setAttendanceData] = useState<AttendanceRecord[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [dateFilter, setDateFilter] = useState<Date | undefined>(undefined);
+  const [dateFilter, setDateFilter] = useState<Date | undefined>(new Date());
   const [searchQuery, setSearchQuery] = useState('');
 
+  const handleClearFilters = () => {
+    setStatusFilter('all');
+    setDateFilter(undefined);
+    setSearchQuery('');
+  };
 
   useEffect(() => {
     if (userRole === 'admin' || userRole === 'hr') {
@@ -87,15 +92,15 @@ const Attendance = () => {
             const attendanceClockOut = record.clockOut || record.checkOut || null;
             const attendanceDuration = record.duration || record.attDuration || 0;
             const attendanceStatus = record.status || record.attStatus || 'Unknown';
-            const attendanceLoginImage = record.setCheckInImageUrl || record.loginImage || record.checkInImage || null;
-            const attendanceLogoutImage = record.setCheckOutImageUrl || record.logoutImage || record.checkOutImage || null;
+            const attendanceLoginImage = record.checkInImageUrl;
+            const attendanceLogoutImage = record.checkOutImageUrl;
 
-            const employeeId = employeeData?.empId || employeeData?.id || null;
-            const employeeName = employeeData?.ename || employeeData?.name || employeeData?.empName || 'Unknown Employee';
-            const employeeEmail = employeeData?.email || employeeData?.empEmail || null;
+            const employeeId = record.employeeId;
+            const employeeName = record.employeeName;
+            const employeeEmail = null; // Assuming email is not directly on record, setting to null if not available in API
 
             const transformedRecord: AttendanceRecord = {
-              id: record.id, // Use the attendance record's id
+              id: record.id,
               date: attendanceDate, 
               clockIn: attendanceClockIn,
               clockOut: attendanceClockOut,
@@ -152,30 +157,6 @@ const Attendance = () => {
         });
     }
   }, [userRole]);
-
-  const getSidebarItems = () => {
-    const baseItems = [
-      { icon: LayoutDashboard, label: 'Dashboard', path: `/${userRole}-dashboard`, active: false },
-      { icon: Users, label: 'Employee Management', path: '/employee-management' },
-      { icon: Calendar, label: 'Leave Management', path: '/leave-management' },
-      { icon: Clock, label: 'Attendance', path: '/attendance', active: true },
-      { icon: TrendingUp, label: 'Performance', path: '/performance' },
-      { icon: FileText, label: 'Documents', path: '/documents' },
-    ];
-
-    if (userRole === 'admin') {
-      baseItems.push(
-        { icon: DollarSign, label: 'Payroll', path: '/payroll' },
-        { icon: Settings, label: 'Settings', path: '/settings' }
-      );
-    } else if (userRole === 'hr') {
-      baseItems.push({ icon: ClipboardList, label: 'Recruitment', path: '/recruitment' });
-    } else {
-      baseItems.push({ icon: Users, label: 'Profile', path: '/profile' });
-    }
-
-    return baseItems;
-  };
 
   const getStatusColor = (status: string | undefined) => {
     switch ((status || '').toLowerCase()) {
@@ -250,6 +231,9 @@ const Attendance = () => {
     });
   };
 
+  console.log('Number of raw attendance records:', attendanceData.length);
+  console.log('Number of filtered attendance records:', getFilteredAttendance().length);
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -281,7 +265,7 @@ const Attendance = () => {
               <div className="space-y-2">
                 <label className="text-sm font-medium">Status</label>
                 <Select value={statusFilter} onValueChange={setStatusFilter}>
-                  <SelectTrigger>
+                  <SelectTrigger className="h-10">
                     <SelectValue placeholder="Filter by status" />
                   </SelectTrigger>
                   <SelectContent>
@@ -296,12 +280,32 @@ const Attendance = () => {
               {/* Date Filter */}
               <div className="space-y-2">
                 <label className="text-sm font-medium">Date</label>
+                <div className="flex gap-2 items-center">
+                  <Button
+                    variant={!dateFilter ? "secondary" : "outline"}
+                    onClick={handleClearFilters}
+                    className="h-10 flex-shrink-0"
+                  >
+                    All Dates
+                  </Button>
+                  <Button
+                    variant={dateFilter && dayjs(dateFilter).isSame(dayjs(), 'day') ? "secondary" : "outline"}
+                    onClick={() => setDateFilter(new Date())}
+                    className="h-10 flex-shrink-0"
+                  >
+                    Today
+                  </Button>
                 <Popover>
                   <PopoverTrigger asChild>
-                    <Button variant="outline" className="w-full justify-start text-left font-normal">
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {dateFilter ? format(dateFilter, "PPP") : "Select date"}
-                    </Button>
+                      <div className="relative flex-1">
+                        <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                        <Input
+                          value={dateFilter ? format(dateFilter, "PPP") : ""}
+                          placeholder="Select date"
+                          readOnly
+                          className="pl-10 w-full h-10"
+                        />
+                      </div>
                   </PopoverTrigger>
                   <PopoverContent className="w-auto p-0">
                     <UiCalendar
@@ -316,6 +320,7 @@ const Attendance = () => {
                     />
                   </PopoverContent>
                 </Popover>
+                </div>
               </div>
 
               {/* Search Filter */}
@@ -327,7 +332,7 @@ const Attendance = () => {
                     placeholder="Search by name or email"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10"
+                    className="pl-10 h-10"
                   />
                 </div>
               </div>
@@ -337,12 +342,8 @@ const Attendance = () => {
                 <label className="text-sm font-medium opacity-0">Clear</label>
                 <Button
                   variant="outline"
-                  className="w-full"
-                  onClick={() => {
-                    setStatusFilter('all');
-                    setDateFilter(undefined);
-                    setSearchQuery('');
-                  }}
+                  className="w-full h-10"
+                  onClick={handleClearFilters}
                 >
                   Clear Filters
                 </Button>
@@ -418,7 +419,8 @@ const Attendance = () => {
                   const duration = calculateDuration(record.clockIn, record.clockOut);
                   console.log('Rendering record:', record);
                   return (
-                    <div key={`${record.id}-${record.employee?.id}`} className="flex items-center justify-between p-4 border rounded-lg hover:shadow-md transition-shadow">
+                    <div key={`${record.id}-${record.employee?.id}`} className="flex flex-col p-4 border rounded-lg hover:shadow-md transition-shadow">
+                      <div className="flex items-center justify-between">
                       <div className="flex items-center gap-4">
                         <Avatar>
                           <AvatarFallback className="bg-blue-600 text-white">
@@ -428,6 +430,7 @@ const Attendance = () => {
                         <div>
                           <h3 className="font-semibold">{record.employee?.name || 'Unknown Employee'}</h3>
                           <div className="flex items-center gap-4 text-sm text-gray-600">
+                              <span>{dayjs(record.date).format('MMM DD, YYYY')}</span>
                             <span>Check In: {record.clockIn ? formatDateTime(record.clockIn) : '-'}</span>
                             <span>Check Out: {record.clockOut ? formatDateTime(record.clockOut) : '-'}</span>
                             <span>Hours: {formatDuration(duration)}</span>
@@ -442,33 +445,35 @@ const Attendance = () => {
                           </span>
                         </Badge>
                       </div>
+                      </div>
+                      
                       {/* Login and Logout Selfies */}
                       {(record.loginImage || record.logoutImage) && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                          <div>
+                        <div className="flex gap-4 mt-4 border-t pt-4">
+                          <div className="flex-1">
                             <p className="text-sm font-medium text-gray-600 mb-2">Login Selfie</p>
                             {record.loginImage ? (
                               <img
                                 src={record.loginImage}
                                 alt={`Login Selfie ${record.employee?.name || 'Employee'}`}
-                                className="w-16 h-16 mx-auto rounded-full object-cover shadow-md"
+                                className="w-24 h-24 rounded-lg object-cover shadow-md"
                               />
                             ) : (
-                              <div className="w-16 h-16 mx-auto rounded-full bg-gray-100 flex items-center justify-center text-gray-400">
+                              <div className="w-24 h-24 rounded-lg bg-gray-100 flex items-center justify-center text-gray-400">
                                 No Image
                               </div>
                             )}
                           </div>
-                          <div>
+                          <div className="flex-1">
                             <p className="text-sm font-medium text-gray-600 mb-2">Logout Selfie</p>
                             {record.logoutImage ? (
                               <img
                                 src={record.logoutImage}
                                 alt={`Logout Selfie ${record.employee?.name || 'Employee'}`}
-                                className="w-16 h-16 mx-auto rounded-full object-cover shadow-md"
+                                className="w-24 h-24 rounded-lg object-cover shadow-md"
                               />
                             ) : (
-                              <div className="w-16 h-16 mx-auto rounded-full bg-gray-100 flex items-center justify-center text-gray-400">
+                              <div className="w-24 h-24 rounded-lg bg-gray-100 flex items-center justify-center text-gray-400">
                                 No Image
                               </div>
                             )}

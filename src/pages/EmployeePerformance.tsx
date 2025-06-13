@@ -1,5 +1,5 @@
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -15,53 +15,98 @@ import {
   Target,
   Award
 } from 'lucide-react';
+import { base_url } from '@/utils/config';
+
+interface Review {
+  id: number;
+  empId: number;
+  reviewText: string;
+  rating: number;
+  givenBy: string;
+  createdAt?: string; // Optional, in case API provides timestamp
+}
+
+interface PerformanceData {
+  id: number;
+  employee: string;
+  email: string;
+  department: string;
+  productivity: number;
+  teamwork: number;
+  communication: number;
+  overallScore: number;
+  goals: string;
+  lastReview: string;
+}
 
 const EmployeePerformance = () => {
   const userRole = localStorage.getItem('userRole') || 'employee';
-  const userEmail = localStorage.getItem('userEmail'); // Assuming user email is used for filtering
+  const userEmail = localStorage.getItem('userEmail');
+  const [employeeId, setEmployeeId] = useState<number | null>(null);
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [performanceData, setPerformanceData] = useState<PerformanceData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Mock performance data - will need to be filtered for the logged-in employee
-  const performanceData = [
-    {
-      id: 1,
-      employee: 'John Doe',
-      email: 'john@company.com',
-      department: 'Engineering',
-      productivity: 4.5,
-      teamwork: 4.0,
-      communication: 4.3,
-      overallScore: Number(((4.5 + 4.0 + 4.3) / 3).toFixed(1)),
-      goals: 'Excellent',
-      lastReview: '2024-03-15'
-    },
-    {
-      id: 2,
-      employee: 'Sarah Wilson',
-      email: 'sarah@company.com',
-      department: 'Marketing',
-      productivity: 4.8,
-      teamwork: 4.6,
-      communication: 4.7,
-      overallScore: Number(((4.8 + 4.6 + 4.7) / 3).toFixed(1)),
-      goals: 'Outstanding',
-      lastReview: '2024-03-10'
-    },
-    {
-      id: 3,
-      employee: 'Mike Johnson',
-      email: 'mike@company.com',
-      department: 'Sales',
-      productivity: 3.9,
-      teamwork: 3.8,
-      communication: 3.7,
-      overallScore: Number(((3.9 + 3.8 + 3.7) / 3).toFixed(1)),
-      goals: 'Good',
-      lastReview: '2024-03-20'
-    },
-  ];
+  // Mock employee data (since no employee API is provided, using minimal data for the logged-in user)
+  // In a real app, you might fetch this from an employee profile API
+  const employeeInfo = {
+    id: 2, // Assuming empId from test response; replace with actual API or auth data
+    employee: 'Current Employee', // Replace with actual name from auth or API
+    email: userEmail || 'unknown@company.com',
+    department: 'Unknown', // Replace with actual department from API
+  };
 
-  // Filter data for the logged-in employee
-  const employeePerformance = performanceData.find(emp => emp.email === userEmail);
+  // Fetch reviews for the employee
+  useEffect(() => {
+    const fetchEmployeeIdAndReviews = async () => {
+      try {
+        setLoading(true);
+        // Note: Since no employee API is provided, assuming empId is known or fetched elsewhere
+        // In a real app, you might need to fetch the employee ID based on userEmail
+        const empId = employeeInfo.id; // Replace with actual logic to get empId
+        setEmployeeId(empId);
+
+        if (empId) {
+          const response = await fetch(`${base_url}/reviews/employee/${empId}`);
+          if (!response.ok) throw new Error('Failed to fetch reviews');
+          const data = await response.json();
+          setReviews(data);
+        }
+      } catch (error) {
+        console.error('Error fetching reviews:', error);
+        setError('Failed to load reviews');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchEmployeeIdAndReviews();
+  }, []);
+
+  // Calculate performance data based on reviews
+  useEffect(() => {
+    if (reviews.length > 0 && employeeId) {
+      const avgRating = Number((reviews.reduce((sum, review) => sum + review.rating, 0) / reviews.length).toFixed(1));
+      const lastReviewDate = reviews.length
+        ? new Date(Math.max(...reviews.map(r => new Date(r.createdAt || Date.now()).getTime()))).toISOString().split('T')[0]
+        : 'N/A';
+
+      setPerformanceData({
+        id: employeeId,
+        employee: employeeInfo.employee,
+        email: employeeInfo.email,
+        department: employeeInfo.department,
+        productivity: avgRating,
+        teamwork: avgRating,
+        communication: avgRating,
+        overallScore: avgRating,
+        goals: avgRating >= 4.5 ? 'Outstanding' : avgRating >= 4.0 ? 'Excellent' : avgRating >= 3.5 ? 'Good' : 'Needs Improvement',
+        lastReview: lastReviewDate,
+      });
+    } else {
+      setPerformanceData(null);
+    }
+  }, [reviews, employeeId]);
 
   const getScoreColor = (score: number) => {
     if (score >= 4.5) return 'text-green-600';
@@ -79,10 +124,33 @@ const EmployeePerformance = () => {
     }
   };
 
+  if (loading) {
+    return (
+      <DashboardLayout>
+        <Card>
+          <CardContent className="p-6 text-center text-gray-600">
+            Loading...
+          </CardContent>
+        </Card>
+      </DashboardLayout>
+    );
+  }
+
+  if (error) {
+    return (
+      <DashboardLayout>
+        <Card>
+          <CardContent className="p-6 text-center text-red-600">
+            {error}
+          </CardContent>
+        </Card>
+      </DashboardLayout>
+    );
+  }
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        {/* Header Section */}
         <div className="flex justify-between items-center">
           <div>
             <h2 className="text-3xl font-bold text-gray-900">My Performance</h2>
@@ -90,8 +158,7 @@ const EmployeePerformance = () => {
           </div>
         </div>
 
-        {/* Personal Performance (for employees) */}
-        {employeePerformance ? (
+        {performanceData ? (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <Card>
               <CardHeader>
@@ -100,12 +167,12 @@ const EmployeePerformance = () => {
               <CardContent>
                 <div className="space-y-6">
                   <div className="text-center">
-                    <p className={`text-3xl font-bold ${getScoreColor(employeePerformance.overallScore)}`}>
-                      {employeePerformance.overallScore.toFixed(1)}/5
+                    <p className={`text-3xl font-bold ${getScoreColor(performanceData.overallScore)}`}>
+                      {performanceData.overallScore.toFixed(1)}/5
                     </p>
                     <p className="text-gray-600">Overall Performance Score</p>
-                    <Badge className={`mt-2 ${getGoalsBadge(employeePerformance.goals)}`}>
-                      {employeePerformance.goals}
+                    <Badge className={`mt-2 ${getGoalsBadge(performanceData.goals)}`}>
+                      {performanceData.goals}
                     </Badge>
                   </div>
 
@@ -113,23 +180,23 @@ const EmployeePerformance = () => {
                     <div>
                       <div className="flex justify-between mb-2">
                         <span className="text-sm font-medium">Productivity</span>
-                        <span className="text-sm text-gray-600">{employeePerformance.productivity.toFixed(1)}/5</span>
+                        <span className="text-sm text-gray-600">{performanceData.productivity.toFixed(1)}/5</span>
                       </div>
-                      <Progress value={(employeePerformance.productivity / 5) * 100} className="h-2" />
+                      <Progress value={(performanceData.productivity / 5) * 100} className="h-2" />
                     </div>
                     <div>
                       <div className="flex justify-between mb-2">
                         <span className="text-sm font-medium">Teamwork</span>
-                        <span className="text-sm text-gray-600">{employeePerformance.teamwork.toFixed(1)}/5</span>
+                        <span className="text-sm text-gray-600">{performanceData.teamwork.toFixed(1)}/5</span>
                       </div>
-                      <Progress value={(employeePerformance.teamwork / 5) * 100} className="h-2" />
+                      <Progress value={(performanceData.teamwork / 5) * 100} className="h-2" />
                     </div>
                     <div>
                       <div className="flex justify-between mb-2">
                         <span className="text-sm font-medium">Communication</span>
-                        <span className="text-sm text-gray-600">{employeePerformance.communication.toFixed(1)}/5</span>
+                        <span className="text-sm text-gray-600">{performanceData.communication.toFixed(1)}/5</span>
                       </div>
-                      <Progress value={(employeePerformance.communication / 5) * 100} className="h-2" />
+                      <Progress value={(performanceData.communication / 5) * 100} className="h-2" />
                     </div>
                   </div>
                 </div>
@@ -138,14 +205,26 @@ const EmployeePerformance = () => {
 
             <Card>
               <CardHeader>
-                <CardTitle>Recent Review</CardTitle>
+                <CardTitle>Recent Reviews</CardTitle>
               </CardHeader>
               <CardContent>
-                {/* This section would typically show details of the latest review */}
-                {/* For now, we can display the last review date from mock data */}
                 <div className="space-y-4">
-                  <p className="text-sm text-gray-600">Last review conducted on: {employeePerformance.lastReview}</p>
-                  {/* Add more review details here as needed */}
+                  {reviews.length > 0 ? (
+                    reviews.map(review => (
+                      <div key={review.id} className="border-b pb-4">
+                        <p className="text-sm text-gray-600">Rating: {review.rating}/5</p>
+                        <p className="text-sm text-gray-600">Review: {review.reviewText}</p>
+                        <p className="text-sm text-gray-600">Given by: {review.givenBy}</p>
+                        {review.createdAt && (
+                          <p className="text-sm text-gray-600">
+                            Date: {new Date(review.createdAt).toISOString().split('T')[0]}
+                          </p>
+                        )}
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-sm text-gray-600">No reviews available</p>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -157,12 +236,9 @@ const EmployeePerformance = () => {
             </CardContent>
           </Card>
         )}
-
-        {/* Current Goals (Adapt from general Performance page if needed) */}
-        {/* Employee specific goals would go here */}
       </div>
     </DashboardLayout>
   );
 };
 
-export default EmployeePerformance; 
+export default EmployeePerformance;

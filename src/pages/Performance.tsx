@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -18,7 +19,6 @@ import {
   Award,
   ClipboardList
 } from 'lucide-react';
-import { useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -28,12 +28,55 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import axios from 'axios';
+import { toast } from '@/components/ui/use-toast';
+import { base_url } from '@/utils/config';
+
+interface Employee {
+  empId: number;
+  ename: string;
+  email: string;
+  department: string;
+}
+
+interface Review {
+  id: number;
+  empId: number;
+  reviewText: string;
+  rating: number;
+  givenBy: string;
+  createdAt?: string;
+}
+
+interface PerformanceData {
+  id: number;
+  employee: string;
+  department: string;
+  productivity: number;
+  teamwork: number;
+  communication: number;
+  overallScore: number;
+  goals: string;
+  lastReview: string;
+}
 
 const Performance = () => {
   const storedUserRole = localStorage.getItem('userRole') || 'employee';
-  const userRole = storedUserRole.toLowerCase(); // Convert to lowercase
-  
+  const userRole = storedUserRole.toLowerCase();
+  const userEmail = localStorage.getItem('userEmail');
+
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [performanceData, setPerformanceData] = useState<PerformanceData[]>([]);
+  const [isCreateReviewModalOpen, setIsCreateReviewModalOpen] = useState(false);
+  const [selectedEmployee, setSelectedEmployee] = useState('');
+  const [reviewText, setReviewText] = useState('');
+  const [rating, setRating] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
   const getSidebarItems = () => {
     const baseItems = [
       { icon: LayoutDashboard, label: 'Dashboard', path: `/${userRole}-dashboard`, active: false },
@@ -58,49 +101,70 @@ const Performance = () => {
     return baseItems;
   };
 
-  const [performanceData, setPerformanceData] = useState([
-    {
-      id: 1,
-      employee: 'John Doe',
-      department: 'Engineering',
-      productivity: 4.5,
-      teamwork: 4.0,
-      communication: 4.3,
-      overallScore: Number(((4.5 + 4.0 + 4.3) / 3).toFixed(1)),
-      goals: 'Excellent',
-      lastReview: '2024-03-15'
-    },
-    {
-      id: 2,
-      employee: 'Sarah Wilson',
-      department: 'Marketing',
-      productivity: 4.8,
-      teamwork: 4.6,
-      communication: 4.7,
-      overallScore: Number(((4.8 + 4.6 + 4.7) / 3).toFixed(1)),
-      goals: 'Outstanding',
-      lastReview: '2024-03-10'
-    },
-    {
-      id: 3,
-      employee: 'Mike Johnson',
-      department: 'Sales',
-      productivity: 3.9,
-      teamwork: 3.8,
-      communication: 3.7,
-      overallScore: Number(((3.9 + 3.8 + 3.7) / 3).toFixed(1)),
-      goals: 'Good',
-      lastReview: '2024-03-20'
-    },
-  ]);
+  // Fetch employees
+  useEffect(() => {
+    const fetchEmployees = async () => {
+      try {
+        setLoading(true);
+        const response = await fetch(`${base_url}/emps/getEmps`);
+        if (!response.ok) throw new Error('Failed to fetch employees');
+        const data = await response.json();
+        setEmployees(data);
+      } catch (error) {
+        console.error('Error fetching employees:', error);
+        setError('Failed to load employee data');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchEmployees();
+  }, []);
 
-  const [isCreateReviewModalOpen, setIsCreateReviewModalOpen] = useState(false);
-  const [selectedEmployee, setSelectedEmployee] = useState('');
-  const [productivityRating, setProductivityRating] = useState<number | string>('');
-  const [teamworkRating, setTeamworkRating] = useState<number | string>('');
-  const [communicationRating, setCommunicationRating] = useState<number | string>('');
+  // Fetch reviews
+  useEffect(() => {
+    const fetchReviews = async () => {
+      try {
+        const response = await fetch(`${base_url}/reviews/all`);
+        if (!response.ok) throw new Error('Failed to fetch reviews');
+        const data = await response.json();
+        setReviews(data);
+      } catch (error) {
+        console.error('Error fetching reviews:', error);
+        setError('Failed to load reviews');
+      }
+    };
+    fetchReviews();
+  }, []);
 
-  // Add more state variables for other form inputs as needed
+  // Calculate performance data
+  useEffect(() => {
+    const calculatePerformance = () => {
+      const newPerformanceData = employees.map(emp => {
+        const empReviews = reviews.filter(review => review.empId === emp.empId);
+        const avgRating = empReviews.length
+          ? Number((empReviews.reduce((sum, review) => sum + review.rating, 0) / empReviews.length).toFixed(1))
+          : 0;
+        
+        return {
+          id: emp.empId,
+          employee: emp.ename,
+          department: emp.department,
+          productivity: avgRating,
+          teamwork: avgRating,
+          communication: avgRating,
+          overallScore: avgRating,
+          goals: avgRating >= 4.5 ? 'Outstanding' : avgRating >= 4.0 ? 'Excellent' : avgRating >= 3.5 ? 'Good' : 'Needs Improvement',
+          lastReview: empReviews.length 
+            ? new Date(Math.max(...empReviews.map(r => new Date(r.createdAt || Date.now()).getTime()))).toISOString().split('T')[0]
+            : 'N/A'
+        };
+      });
+      setPerformanceData(newPerformanceData);
+    };
+    if (employees.length > 0) {
+      calculatePerformance();
+    }
+  }, [employees, reviews]);
 
   const getScoreColor = (score: number) => {
     if (score >= 4.5) return 'text-green-600';
@@ -120,42 +184,82 @@ const Performance = () => {
 
   const canManagePerformance = userRole === 'admin' || userRole === 'hr';
 
-  const handleCreateReview = () => {
-    // Convert ratings to numbers, default to 0 if invalid
-    const prod = Number(productivityRating) || 0;
-    const team = Number(teamworkRating) || 0;
-    const comm = Number(communicationRating) || 0;
-
-    // Basic validation (optional but recommended)
-    if (prod < 0 || prod > 5 || team < 0 || team > 5 || comm < 0 || comm > 5) {
-      console.error('Ratings must be between 0 and 5');
-      // Optionally show a user-friendly error message
+  const handleCreateReview = async () => {
+    if (!selectedEmployee || !reviewText || !rating) {
+      setError('Please fill all fields');
       return;
     }
 
-    const averageScore = (prod + team + comm) / 3;
+    const reviewerEmployee = employees.find(emp => emp.email === userEmail);
+    const givenByName = reviewerEmployee ? reviewerEmployee.ename : 'Unknown Reviewer';
 
-    // Handle form submission logic here
-    console.log('Creating review for Employee ID:', selectedEmployee);
-    console.log('Productivity:', prod);
-    console.log('Teamwork:', team);
-    console.log('Communication:', comm);
-    console.log('Average Score:', averageScore.toFixed(2)); // Log average with 2 decimal places
+    const payload = {
+      empId: Number(selectedEmployee),
+      reviewText,
+      rating: parseFloat(rating),
+      givenBy: givenByName,
+    };
 
-    // Close modal after submission
-    setIsCreateReviewModalOpen(false);
-    setSelectedEmployee('');
-    setProductivityRating('');
-    setTeamworkRating('');
-    setCommunicationRating('');
+    try {
+      const response = await axios.post(`${base_url}/reviews/give`, payload, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+
+      const newReview = response.data;
+      setReviews(prevReviews => [...prevReviews, newReview]);
+
+      setIsCreateReviewModalOpen(false);
+      setSelectedEmployee('');
+      setReviewText('');
+      setRating('');
+      setError(null);
+      toast({
+        title: "Success",
+        description: "Performance review submitted successfully!",
+        variant: "default",
+      });
+    } catch (error: any) {
+      console.error('Error submitting review:', error);
+      setError(error.response?.data?.message || "Failed to submit review");
+      toast({
+        title: "Error",
+        description: error.response?.data?.message || "Failed to submit review. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
+  if (loading) {
+    return (
+      <DashboardLayout>
+        <Card>
+          <CardContent className="p-6 text-center text-gray-600">
+            Loading...
+          </CardContent>
+        </Card>
+      </DashboardLayout>
+    );
+  }
+
+  if (error) {
+    return (
+      <DashboardLayout>
+        <Card>
+          <CardContent className="p-6 text-center text-red-600">
+            {error}
+          </CardContent>
+        </Card>
+      </DashboardLayout>
+    );
+  }
+
+  const employeePerformance = performanceData.find(emp => emp.employee === employees.find(e => e.email === userEmail)?.ename);
+
   return (
-    <DashboardLayout
-      // sidebarItems and userRole are handled within DashboardLayout
-    >
+    <DashboardLayout>
       <div className="space-y-6">
-        {/* Header Section */}
         <div className="flex justify-between items-center">
           <div>
             <h2 className="text-3xl font-bold text-gray-900">Performance Management</h2>
@@ -169,14 +273,15 @@ const Performance = () => {
           )}
         </div>
 
-        {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <Card>
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-gray-600">Average Score</p>
-                  <p className="text-2xl font-bold">4.2/5</p>
+                  <p className="text-2xl font-bold">
+                    {performanceData.length ? (performanceData.reduce((sum, p) => sum + p.overallScore, 0) / performanceData.length).toFixed(1) : '0.0'}/5
+                  </p>
                 </div>
                 <Target className="h-8 w-8 text-blue-600" />
               </div>
@@ -200,7 +305,7 @@ const Performance = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-gray-600">Reviews Due</p>
-                  <p className="text-2xl font-bold">5</p>
+                  <p className="text-2xl font-bold">{employees.length - performanceData.filter(p => p.lastReview !== 'N/A').length}</p>
                 </div>
                 <FileText className="h-8 w-8 text-orange-600" />
               </div>
@@ -212,7 +317,9 @@ const Performance = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-gray-600">Goals Met</p>
-                  <p className="text-2xl font-bold">78%</p>
+                  <p className="text-2xl font-bold">
+                    {performanceData.length ? Math.round((performanceData.filter(p => p.overallScore >= 4.0).length / performanceData.length) * 100) : 0}%
+                  </p>
                 </div>
                 <Award className="h-8 w-8 text-green-600" />
               </div>
@@ -220,7 +327,6 @@ const Performance = () => {
           </Card>
         </div>
 
-        {/* Performance Overview */}
         {(userRole === 'admin' || userRole === 'hr') && (
           <Card>
             <CardHeader>
@@ -234,7 +340,7 @@ const Performance = () => {
                       <div className="flex items-center gap-4">
                         <Avatar>
                           <AvatarFallback className="bg-blue-600 text-white">
-                            {employee.employee.split(' ').map(n => n[0]).join('')}
+                            {(employee.employee || 'NA').split(' ').map(n => n[0]).join('')}
                           </AvatarFallback>
                         </Avatar>
                         <div>
@@ -278,12 +384,14 @@ const Performance = () => {
                     </div>
                   </div>
                 ))}
+                {performanceData.length === 0 && (
+                  <p className="text-center text-gray-600">No performance data available</p>
+                )}
               </div>
             </CardContent>
           </Card>
         )}
 
-        {/* Personal Performance (for employees) */}
         {userRole === 'employee' && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <Card>
@@ -291,72 +399,70 @@ const Performance = () => {
                 <CardTitle>My Performance Metrics</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-6">
-                  <div className="text-center">
-                    <p className="text-3xl font-bold text-blue-600">4.3/5</p>
-                    <p className="text-gray-600">Overall Performance Score</p>
-                    <Badge className="mt-2 bg-blue-100 text-blue-800">Excellent</Badge>
+                {employeePerformance ? (
+                  <div className="space-y-6">
+                    <div className="text-center">
+                      <p className={`text-3xl font-bold ${getScoreColor(employeePerformance.overallScore)}`}>
+                        {employeePerformance.overallScore.toFixed(1)}/5
+                      </p>
+                      <p className="text-gray-600">Overall Performance Score</p>
+                      <Badge className={`mt-2 ${getGoalsBadge(employeePerformance.goals)}`}>
+                        {employeePerformance.goals}
+                      </Badge>
+                    </div>
+                    <div className="space-y-4">
+                      <div>
+                        <div className="flex justify-between mb-2">
+                          <span className="text-sm font-medium">Productivity</span>
+                          <span className="text-sm text-gray-600">{employeePerformance.productivity.toFixed(1)}/5</span>
+                        </div>
+                        <Progress value={(employeePerformance.productivity / 5) * 100} className="h-2" />
+                      </div>
+                      <div>
+                        <div className="flex justify-between mb-2">
+                          <span className="text-sm font-medium">Teamwork</span>
+                          <span className="text-sm text-gray-600">{employeePerformance.teamwork.toFixed(1)}/5</span>
+                        </div>
+                        <Progress value={(employeePerformance.teamwork / 5) * 100} className="h-2" />
+                      </div>
+                      <div>
+                        <div className="flex justify-between mb-2">
+                          <span className="text-sm font-medium">Communication</span>
+                          <span className="text-sm text-gray-600">{employeePerformance.communication.toFixed(1)}/5</span>
+                        </div>
+                        <Progress value={(employeePerformance.communication / 5) * 100} className="h-2" />
+                      </div>
+                    </div>
                   </div>
-                  
-                  <div className="space-y-4">
-                    <div>
-                      <div className="flex justify-between mb-2">
-                        <span className="text-sm font-medium">Goal Completion</span>
-                        <span className="text-sm text-gray-600">4.3/5</span>
-                      </div>
-                      <Progress value={(4.3 / 5) * 100} className="h-2" />
-                    </div>
-                    <div>
-                      <div className="flex justify-between mb-2">
-                        <span className="text-sm font-medium">Project Delivery</span>
-                        <span className="text-sm text-gray-600">4.6/5</span>
-                      </div>
-                      <Progress value={(4.6 / 5) * 100} className="h-2" />
-                    </div>
-                    <div>
-                      <div className="flex justify-between mb-2">
-                        <span className="text-sm font-medium">Skill Development</span>
-                        <span className="text-sm text-gray-600">3.4/5</span>
-                      </div>
-                      <Progress value={(3.4 / 5) * 100} className="h-2" />
-                    </div>
-                  </div>
-                </div>
+                ) : (
+                  <p className="text-center text-gray-600">No performance data available</p>
+                )}
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader>
-                <CardTitle>Current Goals</CardTitle>
+                <CardTitle>Recent Reviews</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  <div className="border-l-4 border-blue-500 pl-4">
-                    <h4 className="font-medium">Q2 Sales Target</h4>
-                    <p className="text-sm text-gray-600">Achieve 120% of quarterly sales quota</p>
-                    <div className="mt-2">
-                      <Progress value={(4.3 / 5) * 100} className="h-2" />
-                      <p className="text-xs text-gray-500 mt-1">86% Complete (4.3/5)</p>
-                    </div>
-                  </div>
-                  
-                  <div className="border-l-4 border-green-500 pl-4">
-                    <h4 className="font-medium">Complete React Training</h4>
-                    <p className="text-sm text-gray-600">Finish advanced React course</p>
-                    <div className="mt-2">
-                      <Progress value={100} className="h-2" />
-                      <p className="text-xs text-gray-500 mt-1">Completed ✓ (5/5)</p>
-                    </div>
-                  </div>
-                  
-                  <div className="border-l-4 border-yellow-500 pl-4">
-                    <h4 className="font-medium">Team Leadership</h4>
-                    <p className="text-sm text-gray-600">Lead cross-functional project team</p>
-                    <div className="mt-2">
-                      <Progress value={(3.0 / 5) * 100} className="h-2" />
-                      <p className="text-xs text-gray-500 mt-1">60% Complete (3.0/5)</p>
-                    </div>
-                  </div>
+                  {employeePerformance && reviews
+                    .filter(review => review.empId === employeePerformance.id)
+                    .map(review => (
+                      <div key={review.id} className="border-b pb-4">
+                        <p className="text-sm text-gray-600">Rating: {review.rating}/5</p>
+                        <p className="text-sm text-gray-600">Review: {review.reviewText}</p>
+                        <p className="text-sm text-gray-600">Given by: {review.givenBy}</p>
+                        {review.createdAt && (
+                          <p className="text-sm text-gray-600">
+                            Date: {new Date(review.createdAt).toISOString().split('T')[0]}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  {(!employeePerformance || reviews.filter(review => review.empId === employeePerformance?.id).length === 0) && (
+                    <p className="text-sm text-gray-600">No reviews available</p>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -364,7 +470,6 @@ const Performance = () => {
         )}
       </div>
 
-      {/* Create Review Dialog */}
       <Dialog open={isCreateReviewModalOpen} onOpenChange={setIsCreateReviewModalOpen}>
         <DialogContent>
           <DialogHeader>
@@ -376,66 +481,49 @@ const Performance = () => {
           <div className="py-4 space-y-4">
             <div className="space-y-2">
               <Label htmlFor="employee">Select Employee</Label>
-              <Select onValueChange={setSelectedEmployee} value={selectedEmployee}>
+              <Select onValueChange={(value) => { setSelectedEmployee(value); }} value={selectedEmployee}>
                 <SelectTrigger id="employee">
-                  <SelectValue placeholder="Select an employee" />
+                  <SelectValue placeholder="Select an employee">
+                    {selectedEmployee
+                      ? (employees.find(emp => String(emp.empId) === selectedEmployee)?.ename ?? employees.find(emp => String(emp.empId) === selectedEmployee)?.email) + ' (' + (employees.find(emp => String(emp.empId) === selectedEmployee)?.email ?? '') + ')'
+                      : "Select an employee"}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
-                  {performanceData.map((employee) => (
-                    <SelectItem key={employee.id} value={String(employee.id)}>{employee.employee}</SelectItem>
+                  {employees.length > 0 && employees.map((employee) => (
+                    <SelectItem key={employee.empId} value={String(employee.empId)}>
+                      {employee.ename} ({employee.email})
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
 
-            {/* Productivity Input */}
             <div className="space-y-2">
-              <Label htmlFor="productivity">Productivity (0-5)</Label>
+              <Label htmlFor="reviewText">Review Comments</Label>
+              <Textarea
+                id="reviewText"
+                value={reviewText}
+                onChange={(e) => setReviewText(e.target.value)}
+                placeholder="Enter review comments"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="rating">Rating (0-5)</Label>
               <Input
-                id="productivity"
+                id="rating"
                 type="number"
                 step="0.1"
                 min="0"
                 max="5"
                 placeholder="Enter rating (e.g., 4.5)"
-                value={productivityRating}
-                onChange={(e) => setProductivityRating(e.target.value)}
+                value={rating}
+                onChange={(e) => setRating(e.target.value)}
               />
             </div>
-
-            {/* Teamwork Input */}
-            <div className="space-y-2">
-              <Label htmlFor="teamwork">Teamwork (0-5)</Label>
-              <Input
-                id="teamwork"
-                type="number"
-                step="0.1"
-                min="0"
-                max="5"
-                placeholder="Enter rating (e.g., 4.0)"
-                value={teamworkRating}
-                onChange={(e) => setTeamworkRating(e.target.value)}
-              />
-            </div>
-
-            {/* Communication Input */}
-            <div className="space-y-2">
-              <Label htmlFor="communication">Communication (0-5)</Label>
-              <Input
-                id="communication"
-                type="number"
-                step="0.1"
-                min="0"
-                max="5"
-                placeholder="Enter rating (e.g., 5.0)"
-                value={communicationRating}
-                onChange={(e) => setCommunicationRating(e.target.value)}
-              />
-            </div>
-
-            {/* Add more form fields here for review details */}
-            {/* Example: Overall Score, Goals, Comments, etc. */}
           </div>
+          {error && <p className="text-red-600 text-sm">{error}</p>}
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => setIsCreateReviewModalOpen(false)}>
               Cancel

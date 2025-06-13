@@ -20,6 +20,7 @@ import { format } from "date-fns";
 import { toast } from '@/components/ui/use-toast';
 import dayjs from 'dayjs';
 import quarterOfYear from 'dayjs/plugin/quarterOfYear';
+import { base_url } from '@/utils/config';
 
 dayjs.extend(quarterOfYear);
 
@@ -52,15 +53,6 @@ interface AttendanceRecord {
 }
 
 const EmployeeDashboard = () => {
-  const sidebarItems = [
-    { icon: LayoutDashboard, label: 'Dashboard', path: '/employee-dashboard', active: true },
-    { icon: Calendar, label: 'Leaves Management', path: '/employee-leaves' },
-    { icon: Clock, label: 'Your Attendance', path: '/employee-attendance' },
-    { icon: TrendingUp, label: 'Performance', path: '/employee/performance' },
-    { icon: FileText, label: 'Documents', path: '/employee/documents' },
-    { icon: User, label: 'Profile', path: '/employee/profile' },
-  ];
-
   const [recentLeaves, setRecentLeaves] = useState<LeaveRecord[]>([]);
   const [leaveBalance, setLeaveBalance] = useState<number | 'Loading...' | 'Error'>('Loading...');
   const [isLoadingLeaves, setIsLoadingLeaves] = useState(true);
@@ -83,7 +75,7 @@ const EmployeeDashboard = () => {
         return;
       }
       try {
-        const response = await axios.get(`http://localhost:8080/leaves/employee/${empId}`);
+        const response = await axios.get(`${base_url}/leaves/employee/${empId}`);
         console.log('Leave history fetched for dashboard:', response.data);
 
         const fetchedLeaves: LeaveRecord[] = response.data.map((leave: any) => ({
@@ -140,7 +132,7 @@ const EmployeeDashboard = () => {
         return;
       }
       try {
-        const response = await axios.get(`http://localhost:8080/api/attendance/employee/${empId}`);
+        const response = await axios.get(`${base_url}/api/attendance/employee/${empId}`);
         console.log('Attendance history fetched for dashboard:', response.data);
 
         const fetchedAttendance: AttendanceRecord[] = response.data.map((record: any) => ({
@@ -277,33 +269,7 @@ const EmployeeDashboard = () => {
             </CardContent>
           </Card>
         </div>
-
-        {/* Quick Actions
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <LayoutDashboard className="h-5 w-5" />
-              Quick Actions
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <Button className="h-16 flex flex-col gap-2 bg-blue-600 hover:bg-blue-700">
-                <Calendar className="h-5 w-5" />
-                Request Leave
-              </Button>
-              <Button variant="outline" className="h-16 flex flex-col gap-2">
-                <Clock className="h-5 w-5" />
-                Clock In/Out
-              </Button>
-              <Button variant="outline" className="h-16 flex flex-col gap-2">
-                <FileText className="h-5 w-5" />
-                View Payslip
-              </Button>
-            </div>
-          </CardContent>
-        </Card> */}
-
+        
         {/* Recent Leaves & Recent Activities */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Recent Leaves */}

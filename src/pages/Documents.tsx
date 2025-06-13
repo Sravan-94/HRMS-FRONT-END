@@ -1,5 +1,4 @@
-
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,126 +20,223 @@ import {
   Search,
   ClipboardList
 } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { base_url } from '@/utils/config';
+
+
+interface Employee {
+  empId: number;
+  ename: string;
+  email: string;
+  department: string;
+}
+
+interface Document {
+  docId: number;
+  empId: number;
+  paySlips: string | null;
+  pf: string | null;
+  form16: string | null;
+  uploadDateTime: string;
+}
+
+
 
 const Documents = () => {
   const userRole = localStorage.getItem('userRole') || 'employee';
-  
-  const getSidebarItems = () => {
-    const baseItems = [
-      { icon: LayoutDashboard, label: 'Dashboard', path: `/${userRole}-dashboard`, active: false },
-      { icon: Users, label: 'Employee Management', path: '/employee-management' },
-      { icon: Calendar, label: 'Leave Management', path: '/leave-management' },
-      { icon: Clock, label: 'Attendance', path: '/attendance' },
-      { icon: TrendingUp, label: 'Performance', path: '/performance' },
-      { icon: FileText, label: 'Documents', path: '/documents', active: true },
-    ];
+  const userEmail = localStorage.getItem('userEmail');
 
-    if (userRole === 'admin') {
-      baseItems.push(
-        { icon: DollarSign, label: 'Payroll', path: '/payroll' },
-        { icon: Settings, label: 'Settings', path: '/settings' }
-      );
-    } else if (userRole === 'hr') {
-      baseItems.push({ icon: ClipboardList, label: 'Recruitment', path: '/recruitment' });
-    } else {
-      baseItems.push({ icon: Users, label: 'Profile', path: '/profile' });
+  const [documents, setDocuments] = useState<Document[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const [selectedEmployee, setSelectedEmployee] = useState('');
+  const [paySlips, setPaySlips] = useState<File | null>(null);
+  const [pf, setPf] = useState<File | null>(null);
+  const [form16, setForm16] = useState<File | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Filter documents for employees to show only their own
+  const visibleDocuments = useMemo(() => {
+    return userRole === 'employee'
+      ? documents.filter(doc => {
+          const emp = employees.find(e => e.email === userEmail);
+          return emp && doc.empId === emp.empId;
+        })
+      : documents;
+  }, [documents, employees, userRole, userEmail]);
+
+  // Fetch all documents
+  useEffect(() => {
+    const fetchDocuments = async () => {
+      try {
+        setLoading(true);
+        const response = await fetch(`${base_url}/documents/all`);
+        if (!response.ok) throw new Error('Failed to fetch documents');
+        const data = await response.json();
+        setDocuments(data);
+      } catch (error) {
+        console.error('Error fetching documents:', error);
+        setError('Failed to load documents');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchDocuments();
+  }, []);
+
+  // Fetch employees (for admin/HR upload form)
+  useEffect(() => {
+      const fetchEmployees = async () => {
+        try {
+        const response = await fetch(`${base_url}/emps/getEmps`);
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`Failed to fetch employees: ${response.status} ${response.statusText} - ${errorText}`);
+        }
+          const data = await response.json();
+          setEmployees(data);
+        } catch (error) {
+          console.error('Error fetching employees:', error);
+          setError('Failed to load employee data');
+        }
+      };
+      fetchEmployees();
+  }, []);
+
+  const handleUploadDocument = async () => {
+    if (!selectedEmployee) {
+      setError('Please select an employee');
+      return;
     }
 
-    return baseItems;
-  };
+    if (!paySlips && !pf && !form16) {
+      setError('Please select at least one document to upload');
+      return;
+    }
 
-  const documents = [
-    {
-      id: 1,
-      name: 'Employee Handbook 2024',
-      type: 'Policy',
-      category: 'Company Policies',
-      uploadedBy: 'HR Team',
-      uploadDate: '2024-01-15',
-      size: '2.5 MB',
-      access: 'All Employees'
-    },
-    {
-      id: 2,
-      name: 'Performance Review Template',
-      type: 'Template',
-      category: 'HR Forms',
-      uploadedBy: 'Sarah Wilson',
-      uploadDate: '2024-03-01',
-      size: '1.2 MB',
-      access: 'HR & Admin'
-    },
-    {
-      id: 3,
-      name: 'Leave Request Form',
-      type: 'Form',
-      category: 'HR Forms',
-      uploadedBy: 'Admin',
-      uploadDate: '2024-02-10',
-      size: '0.8 MB',
-      access: 'All Employees'
-    },
-    {
-      id: 4,
-      name: 'Salary Certificate - John Doe',
-      type: 'Certificate',
-      category: 'Personal Documents',
-      uploadedBy: 'HR Team',
-      uploadDate: '2024-05-20',
-      size: '0.5 MB',
-      access: 'Employee Only'
-    },
-    {
-      id: 5,
-      name: 'Company Org Chart 2024',
-      type: 'Reference',
-      category: 'Company Info',
-      uploadedBy: 'Admin',
-      uploadDate: '2024-01-01',
-      size: '1.8 MB',
-      access: 'All Employees'
-    },
-  ];
+    const formData = new FormData();
+    if (paySlips) formData.append('paySlips', paySlips);
+    if (pf) formData.append('pf', pf);
+    if (form16) formData.append('form16', form16);
+
+    console.log('FormData contents:');
+    for (const pair of formData.entries()) {
+      console.log(`${pair[0]}: ${pair[1] instanceof File ? pair[1].name : pair[1]}`);
+    }
+
+    try {
+      const response = await fetch(`${base_url}/documents/upload/${selectedEmployee}`, {
+        method: 'POST',
+        body: formData,
+      });
+      if (!response.ok) {
+        const errorText = await response.text();
+        let errorMessage = `Failed to upload document: ${response.status} ${response.statusText}`;
+        try {
+          const errorJson = JSON.parse(errorText);
+          errorMessage += ` - ${errorJson.message || errorText}`;
+          if (errorMessage.includes('Failed to save file')) {
+            errorMessage = 'Failed to upload document: Unable to save file on server. Please contact support.';
+          }
+        } catch (e) {
+          errorMessage += ` - ${errorText}`;
+        }
+        throw new Error(errorMessage);
+      }
+      const newDocument = await response.json();
+      setDocuments([...documents, newDocument]);
+      setIsUploadModalOpen(false);
+      setSelectedEmployee('');
+      setPaySlips(null);
+      setPf(null);
+      setForm16(null);
+      setError(null);
+    } catch (error: any) {
+      console.error('Error uploading document:', error);
+      setError(error.message || 'Failed to upload document');
+    }
+  };
 
   const getTypeColor = (type: string) => {
     switch (type) {
-      case 'Policy': return 'bg-blue-100 text-blue-800';
-      case 'Template': return 'bg-green-100 text-green-800';
-      case 'Form': return 'bg-purple-100 text-purple-800';
-      case 'Certificate': return 'bg-yellow-100 text-yellow-800';
-      case 'Reference': return 'bg-gray-100 text-gray-800';
+      case 'Pay Slip': return 'bg-blue-100 text-blue-800';
+      case 'PF Statement': return 'bg-green-100 text-green-800';
+      case 'Form 16': return 'bg-yellow-100 text-yellow-800';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
 
-  const canUploadDocuments = userRole === 'admin' || userRole === 'hr';
+  const getDocumentName = (doc: Document, type: string) => {
+    switch (type) {
+      case 'Pay Slip': return doc.paySlips ? `Pay Slip - ${new Date(doc.uploadDateTime).toLocaleDateString()}` : null;
+      case 'PF Statement': return doc.pf ? `PF Statement - ${new Date(doc.uploadDateTime).toLocaleDateString()}` : null;
+      case 'Form 16': return doc.form16 ? `Form 16 - ${new Date(doc.uploadDateTime).toLocaleDateString()}` : null;
+      default: return null;
+    }
+  };
+
+  const getDocumentUrl = (doc: Document, type: string) => {
+    switch (type) {
+      case 'Pay Slip': return doc.paySlips ? `$${base_url}${doc.paySlips}` : null;
+      case 'PF Statement': return doc.pf ? `${base_url}${doc.pf}` : null;
+      case 'Form 16': return doc.form16 ? `${base_url}${doc.form16}` : null;
+      default: return null;
+    }
+  };
+
+  if (loading) {
+    return (
+      <DashboardLayout>
+        <Card>
+          <CardContent className="p-6 text-center text-gray-600">
+            Loading...
+          </CardContent>
+        </Card>
+      </DashboardLayout>
+    );
+  }
+
+  if (error) {
+    return (
+      <DashboardLayout>
+        <Card>
+          <CardContent className="p-6 text-center text-red-600">
+            {error}
+          </CardContent>
+        </Card>
+      </DashboardLayout>
+    );
+  }
 
   return (
-    <DashboardLayout
-      sidebarItems={getSidebarItems()}
-      title="Document Management"
-      userRole={userRole.charAt(0).toUpperCase() + userRole.slice(1)}
-    >
+    <DashboardLayout>
       <div className="space-y-6">
-        {/* Header Section */}
-        <div className="flex justify-between items-center">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-4 sm:space-y-0">
           <div>
             <h2 className="text-3xl font-bold text-gray-900">Document Management</h2>
             <p className="text-gray-600">Access and manage company documents</p>
           </div>
-          {canUploadDocuments && (
-            <Button className="bg-blue-600 hover:bg-blue-700">
-              <Upload className="h-4 w-4 mr-2" />
-              Upload Document
-            </Button>
-          )}
+            <div className="flex gap-2">
+              <Button className="bg-blue-600 hover:bg-blue-700" onClick={() => setIsUploadModalOpen(true)}>
+                <Upload className="h-4 w-4 mr-2" />
+                Upload Documents
+              </Button>
+            </div>
         </div>
 
-        {/* Search and Filters */}
         <Card>
           <CardContent className="p-6">
-            <div className="flex gap-4">
-              <div className="flex-1">
+            <div className="flex flex-col sm:flex-row gap-4">
+              <div className="flex-1 w-full">
                 <div className="relative">
                   <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                   <Input
@@ -149,20 +245,19 @@ const Documents = () => {
                   />
                 </div>
               </div>
-              <Button variant="outline">Filter by Category</Button>
-              <Button variant="outline">Filter by Type</Button>
+              <Button variant="outline" className="w-full sm:w-auto">Filter by Category</Button>
+              <Button variant="outline" className="w-full sm:w-auto">Filter by Type</Button>
             </div>
           </CardContent>
         </Card>
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           <Card>
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-gray-600">Total Documents</p>
-                  <p className="text-2xl font-bold">{documents.length}</p>
+                  <p className="text-2xl font-bold">{visibleDocuments.length}</p>
                 </div>
                 <FileText className="h-8 w-8 text-blue-600" />
               </div>
@@ -173,10 +268,10 @@ const Documents = () => {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-600">Policy Documents</p>
-                  <p className="text-2xl font-bold">{documents.filter(d => d.type === 'Policy').length}</p>
+                  <p className="text-sm font-medium text-gray-600">Pay Slips</p>
+                  <p className="text-2xl font-bold">{visibleDocuments.filter(d => d.paySlips).length}</p>
                 </div>
-                <Settings className="h-8 w-8 text-green-600" />
+                <DollarSign className="h-8 w-8 text-green-600" />
               </div>
             </CardContent>
           </Card>
@@ -185,8 +280,8 @@ const Documents = () => {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-600">Forms & Templates</p>
-                  <p className="text-2xl font-bold">{documents.filter(d => d.type === 'Form' || d.type === 'Template').length}</p>
+                  <p className="text-sm font-medium text-gray-600">PF Statements</p>
+                  <p className="text-2xl font-bold">{visibleDocuments.filter(d => d.pf).length}</p>
                 </div>
                 <ClipboardList className="h-8 w-8 text-purple-600" />
               </div>
@@ -197,57 +292,73 @@ const Documents = () => {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-600">Recent Uploads</p>
-                  <p className="text-2xl font-bold">3</p>
+                  <p className="text-sm font-medium text-gray-600">Form 16</p>
+                  <p className="text-2xl font-bold">{visibleDocuments.filter(d => d.form16).length}</p>
                 </div>
-                <Upload className="h-8 w-8 text-orange-600" />
+                <FileText className="h-8 w-8 text-orange-600" />
               </div>
             </CardContent>
           </Card>
         </div>
 
-        {/* Documents List */}
         <Card>
           <CardHeader>
             <CardTitle>All Documents</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {documents.map((document) => (
-                <div key={document.id} className="flex items-center justify-between p-4 border rounded-lg hover:shadow-md transition-shadow">
-                  <div className="flex items-center gap-4">
-                    <div className="bg-blue-100 p-3 rounded-lg">
-                      <FileText className="h-6 w-6 text-blue-600" />
-                    </div>
-                    <div>
-                      <h3 className="font-semibold">{document.name}</h3>
-                      <p className="text-sm text-gray-600">{document.category} • {document.size}</p>
-                      <p className="text-sm text-gray-500">Uploaded by {document.uploadedBy} on {document.uploadDate}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <Badge className={getTypeColor(document.type)}>
-                      {document.type}
-                    </Badge>
-                    <Badge variant="outline" className="text-xs">
-                      {document.access}
-                    </Badge>
-                    <div className="flex gap-2">
-                      <Button size="sm" variant="outline">
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                      <Button size="sm" variant="outline">
-                        <Download className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                </div>
+              {['Pay Slip', 'PF Statement', 'Form 16'].map(type => (
+                visibleDocuments.map(doc => {
+                  const name = getDocumentName(doc, type);
+                  const url = getDocumentUrl(doc, type);
+                  if (name && url) {
+                    return (
+                      <div key={`${doc.docId}-${type}`} className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 border rounded-lg hover:shadow-md transition-shadow space-y-2 sm:space-y-0">
+                        <div className="flex items-center gap-4">
+                          <div className="bg-blue-100 p-3 rounded-lg">
+                            <FileText className="h-6 w-6 text-blue-600" />
+                          </div>
+                          <div>
+                            <h3 className="font-semibold">{name}</h3>
+                            <p className="text-sm text-gray-600">Personal Documents • PDF</p>
+                            <p className="text-sm text-gray-500">
+                              Uploaded on {new Date(doc.uploadDateTime).toLocaleDateString()}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mt-2 sm:mt-0">
+                          <Badge className={getTypeColor(type)}>
+                            {type}
+                          </Badge>
+                          <Badge variant="outline" className="text-xs">
+                            {userRole === 'employee' ? 'Employee Only' : 'Admin/HR'}
+                          </Badge>
+                          <div className="flex gap-2">
+                            <Button size="sm" asChild variant="outline">
+                              <a href={url} target="_blank" rel="noopener noreferrer">
+                                <Eye className="h-4 w-4" />
+                              </a>
+                            </Button>
+                            <Button size="sm" asChild variant="outline">
+                              <a href={url} download>
+                                <Download className="h-4 w-4" />
+                              </a>
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }
+                  return null;
+                })
               ))}
+              {visibleDocuments.length === 0 && (
+                <p className="text-center text-gray-600">No documents available</p>
+              )}
             </div>
           </CardContent>
         </Card>
 
-        {/* Quick Access (for employees) */}
         {userRole === 'employee' && (
           <Card>
             <CardHeader>
@@ -255,24 +366,32 @@ const Documents = () => {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <Button variant="outline" className="h-16 flex flex-col gap-2">
-                  <FileText className="h-5 w-5" />
-                  Employee Handbook
-                </Button>
-                <Button variant="outline" className="h-16 flex flex-col gap-2">
-                  <Calendar className="h-5 w-5" />
-                  Leave Request Form
-                </Button>
-                <Button variant="outline" className="h-16 flex flex-col gap-2">
-                  <Settings className="h-5 w-5" />
-                  Company Policies
-                </Button>
+                {['Pay Slip', 'PF Statement', 'Form 16'].map(type => {
+                  const latestDoc = visibleDocuments
+                    .filter(doc => getDocumentUrl(doc, type))
+                    .sort((a, b) => new Date(b.uploadDateTime).getTime() - new Date(a.uploadDateTime).getTime())[0];
+                  return (
+                    <Button
+                      key={type}
+                      variant="outline"
+                      className="h-16 flex flex-col gap-2"
+                      disabled={!latestDoc}
+                      asChild
+                    >
+                      {latestDoc && (
+                        <a href={getDocumentUrl(latestDoc, type)!} download>
+                          <FileText className="h-5 w-5" />
+                          Latest {type}
+                        </a>
+                      )}
+                    </Button>
+                  );
+                })}
               </div>
             </CardContent>
           </Card>
         )}
 
-        {/* Document Categories */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <Card>
             <CardHeader>
@@ -281,20 +400,16 @@ const Documents = () => {
             <CardContent>
               <div className="space-y-3">
                 <div className="flex justify-between items-center">
-                  <span className="text-sm font-medium">Company Policies</span>
-                  <span className="text-sm text-gray-600">2 documents</span>
+                  <span className="text-sm font-medium">Pay Slips</span>
+                  <span className="text-sm text-gray-600">{visibleDocuments.filter(d => d.paySlips).length} documents</span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-sm font-medium">HR Forms</span>
-                  <span className="text-sm text-gray-600">2 documents</span>
+                  <span className="text-sm font-medium">PF Statements</span>
+                  <span className="text-sm text-gray-600">{visibleDocuments.filter(d => d.pf).length} documents</span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-sm font-medium">Personal Documents</span>
-                  <span className="text-sm text-gray-600">1 document</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm font-medium">Company Info</span>
-                  <span className="text-sm text-gray-600">1 document</span>
+                  <span className="text-sm font-medium">Form 16</span>
+                  <span className="text-sm text-gray-600">{visibleDocuments.filter(d => d.form16).length} documents</span>
                 </div>
               </div>
             </CardContent>
@@ -306,31 +421,103 @@ const Documents = () => {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                <div className="flex items-center gap-3">
-                  <Upload className="h-4 w-4 text-blue-600" />
-                  <div className="flex-1">
-                    <p className="text-sm font-medium">Salary Certificate uploaded</p>
-                    <p className="text-xs text-gray-500">2 hours ago</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <Download className="h-4 w-4 text-green-600" />
-                  <div className="flex-1">
-                    <p className="text-sm font-medium">Employee Handbook downloaded</p>
-                    <p className="text-xs text-gray-500">5 hours ago</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <FileText className="h-4 w-4 text-purple-600" />
-                  <div className="flex-1">
-                    <p className="text-sm font-medium">Performance Review Template updated</p>
-                    <p className="text-xs text-gray-500">1 day ago</p>
-                  </div>
-                </div>
+                {visibleDocuments
+                  .sort((a, b) => new Date(b.uploadDateTime).getTime() - new Date(a.uploadDateTime).getTime())
+                  .slice(0, 3)
+                  .map(doc => (
+                    <div key={doc.docId} className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                      <Upload className="h-4 w-4 text-blue-600" />
+                      <div className="flex-1">
+                        <p className="text-sm font-medium">
+                          Documents uploaded for Employee ID {doc.empId}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {new Date(doc.uploadDateTime).toLocaleString()}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                {visibleDocuments.length === 0 && (
+                  <p className="text-sm text-gray-600">No recent activity</p>
+                )}
               </div>
             </CardContent>
           </Card>
         </div>
+
+        <Dialog open={isUploadModalOpen} onOpenChange={setIsUploadModalOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Upload Documents</DialogTitle>
+              <DialogDescription>
+                Select an employee and upload their document(s).
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-4 space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="employee">Select Employee</Label>
+                <Select onValueChange={setSelectedEmployee} value={selectedEmployee}>
+                  <SelectTrigger id="employee">
+                    <SelectValue placeholder="Select an employee" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {employees.map((employee) => (
+                      <SelectItem key={employee.empId} value={String(employee.empId)}>
+                        {employee.ename} ({employee.email})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="paySlips">Pay Slip</Label>
+                <Input
+                  id="paySlips"
+                  type="file"
+                  accept=".pdf"
+                  onChange={(e) => setPaySlips(e.target.files?.[0] || null)}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="pf">PF Statement</Label>
+                <Input
+                  id="pf"
+                  type="file"
+                  accept=".pdf"
+                  onChange={(e) => setPf(e.target.files?.[0] || null)}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="form16">Form 16</Label>
+                <Input
+                  id="form16"
+                  type="file"
+                  accept=".pdf"
+                  onChange={(e) => setForm16(e.target.files?.[0] || null)}
+                />
+              </div>
+            </div>
+            {error && <p className="text-red-600 text-sm">{error}</p>}
+            <div className="flex flex-col-reverse sm:flex-row justify-end gap-2">
+              <Button variant="outline" onClick={() => {
+                setIsUploadModalOpen(false);
+                setError(null);
+                setSelectedEmployee('');
+                setPaySlips(null);
+                setPf(null);
+                setForm16(null);
+              }}>
+                Cancel
+              </Button>
+              <Button onClick={handleUploadDocument}>
+                Upload
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </DashboardLayout>
   );

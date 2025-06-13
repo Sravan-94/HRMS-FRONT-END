@@ -9,30 +9,102 @@ import {
   ClipboardList,
   TrendingUp,
   FileText,
+  Settings,
   UserPlus,
   Activity,
-  Clock,
-  CheckCircle
+  DollarSign,
+  Clock
 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import axios from 'axios';
+import { toast } from '@/components/ui/use-toast';
+import { base_url } from '@/utils/config';
+
+interface Employee {
+  id?: number; // Or empId, based on backend
+  empId?: number;
+  ename: string;
+  status?: string; // Assuming employee status is available
+  department?: string; // Assuming department is available
+  // Add other employee properties if needed
+}
+
+interface LeaveRequest {
+  id: number;
+  employee: string;
+  type: string;
+  startDate: string;
+  endDate: string;
+  days: number;
+  status: string;
+  reason: string;
+}
 
 const HRDashboard = () => {
-  const sidebarItems = [
-    { icon: LayoutDashboard, label: 'Dashboard', path: '/hr-dashboard', active: true },
-    { icon: Users, label: 'Employee Management', path: '/employee-management' },
-    { icon: Calendar, label: 'Leave Management', path: '/leave-management' },
-    { icon: Clock, label: 'Attendance', path: '/attendance' },
-    { icon: TrendingUp, label: 'Performance', path: '/performance' },
-    { icon: FileText, label: 'Documents', path: '/documents' },
-    { icon: ClipboardList, label: 'Recruitment', path: '/recruitment' },
-  ];
+  const [totalEmployees, setTotalEmployees] = useState<number | 'Loading...' | 'Error'>('Loading...');
+  const [activeEmployees, setActiveEmployees] = useState<number | 'Loading...' | 'Error'>('Loading...');
+  const [pendingLeaves, setPendingLeaves] = useState<number | 'Loading...' | 'Error'>('Loading...');
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setIsLoading(true);
+        const [employeesResponse, leavesResponse] = await Promise.all([
+          axios.get(`${base_url}/emps/getEmps`),
+          axios.get(`${base_url}/leaves/getAllLeaves`),
+        ]);
+
+        console.log('Fetched employees for admin dashboard:', employeesResponse.data);
+        console.log('Fetched leaves for admin dashboard:', leavesResponse.data);
+
+        const allEmployees: Employee[] = employeesResponse.data; // Assuming API returns Employee[]
+        const allLeaves: LeaveRequest[] = leavesResponse.data; // Assuming API returns LeaveRequest[]
+
+        // Calculate Total Employees
+        setTotalEmployees(allEmployees.length);
+
+        // Calculate Active Employees (assuming 'status' field exists in Employee and 'Active' indicates active)
+        const activeCount = allEmployees.filter(emp => emp.status?.toLowerCase() === 'active').length;
+        setActiveEmployees(activeCount);
+
+        // Calculate Pending Leaves
+        const pendingCount = allLeaves.filter(leave => leave.status.toLowerCase() === 'pending').length;
+        setPendingLeaves(pendingCount);
+
+      } catch (error) {
+        console.error('Error fetching data for admin dashboard:', error);
+        toast({
+          title: "Error",
+          description: "Failed to fetch dashboard data.",
+          variant: "destructive",
+        });
+        setTotalEmployees('Error');
+        setActiveEmployees('Error');
+        setPendingLeaves('Error');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
 
   return (
-    <DashboardLayout
-      sidebarItems={sidebarItems}
-      title="HR Dashboard"
-      userRole="HR Manager"
-    >
-      <div className="space-y-6">
+    <DashboardLayout>
+      {/* Welcome Section */}
+      <Card className="bg-gradient-to-r from-blue-600 to-blue-700 text-white">
+        <CardContent className="p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-2xl font-bold mb-2">Welcome to the Admin Dashboard!</h2>
+              <p className="text-blue-100">Manage your HRMS effectively</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="space-y-6 mt-6">
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <Card className="hover:shadow-lg transition-shadow">
@@ -41,134 +113,65 @@ const HRDashboard = () => {
               <Users className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">234</div>
-              <p className="text-xs text-muted-foreground">Across all departments</p>
+              <div className="text-2xl font-bold">{totalEmployees}</div>
+              <p className="text-xs text-muted-foreground">+12% from last month</p>
             </CardContent>
           </Card>
 
           <Card className="hover:shadow-lg transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Present Today</CardTitle>
+              <CardTitle className="text-sm font-medium">Active Employees</CardTitle>
               <Activity className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">218</div>
+              <div className="text-2xl font-bold">{activeEmployees}</div>
               <p className="text-xs text-muted-foreground">93% attendance rate</p>
             </CardContent>
           </Card>
 
           <Card className="hover:shadow-lg transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Leave Requests</CardTitle>
+              <CardTitle className="text-sm font-medium">Pending Leaves</CardTitle>
               <Calendar className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">12</div>
-              <p className="text-xs text-muted-foreground">Pending approval</p>
+              <div className="text-2xl font-bold">{pendingLeaves}</div>
+              <p className="text-xs text-muted-foreground">Awaiting approval</p>
             </CardContent>
           </Card>
 
           <Card className="hover:shadow-lg transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Open Positions</CardTitle>
-              <UserPlus className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-medium">Monthly Payroll</CardTitle>
+              <DollarSign className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">8</div>
-              <p className="text-xs text-muted-foreground">Actively recruiting</p>
+              <div className="text-2xl font-bold">--</div>
+              <p className="text-xs text-muted-foreground">+20.1% from last month</p>
             </CardContent>
           </Card>
         </div>
 
-        {/* Quick Actions */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <ClipboardList className="h-5 w-5" />
-              HR Quick Actions
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <Button className="h-16 flex flex-col gap-2 bg-blue-600 hover:bg-blue-700">
-                <Calendar className="h-5 w-5" />
-                Approve Leaves
-              </Button>
-              <Button variant="outline" className="h-16 flex flex-col gap-2">
-                <UserPlus className="h-5 w-5" />
-                Add Employee
-              </Button>
-              <Button variant="outline" className="h-16 flex flex-col gap-2">
-                <FileText className="h-5 w-5" />
-                Generate Report
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Recent Activities & Tasks */}
+        {/* Recent Activities */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <Card>
             <CardHeader>
-              <CardTitle>Pending Tasks</CardTitle>
+              <CardTitle>Recent Activities</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-2 h-2 bg-red-500 rounded-full"></div>
-                  <div className="flex-1">
-                    <p className="text-sm font-medium">Review John Doe's leave request</p>
-                    <p className="text-xs text-muted-foreground">Due today</p>
-                  </div>
-                  <Button size="sm" variant="outline">Review</Button>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
-                  <div className="flex-1">
-                    <p className="text-sm font-medium">Interview scheduled with candidate</p>
-                    <p className="text-xs text-muted-foreground">Tomorrow 2:00 PM</p>
-                  </div>
-                  <Button size="sm" variant="outline">View</Button>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
-                  <div className="flex-1">
-                    <p className="text-sm font-medium">Complete Q4 performance reviews</p>
-                    <p className="text-xs text-muted-foreground">Due in 3 days</p>
-                  </div>
-                  <Button size="sm" variant="outline">Start</Button>
-                </div>
+                <p className="text-center text-gray-500">No recent activities data available.</p>
               </div>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
-              <CardTitle>Employee Highlights</CardTitle>
+              <CardTitle>Department Overview</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                <div className="flex items-center gap-3">
-                  <CheckCircle className="h-5 w-5 text-green-500" />
-                  <div className="flex-1">
-                    <p className="text-sm font-medium">Sarah Wilson completed onboarding</p>
-                    <p className="text-xs text-muted-foreground">Engineering Department</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <CheckCircle className="h-5 w-5 text-blue-500" />
-                  <div className="flex-1">
-                    <p className="text-sm font-medium">Mike Johnson achieved sales target</p>
-                    <p className="text-xs text-muted-foreground">Sales Department</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <CheckCircle className="h-5 w-5 text-purple-500" />
-                  <div className="flex-1">
-                    <p className="text-sm font-medium">Team completed project milestone</p>
-                    <p className="text-xs text-muted-foreground">Marketing Department</p>
-                  </div>
-                </div>
+                <p className="text-center text-gray-500">No department overview data available.</p>
               </div>
             </CardContent>
           </Card>

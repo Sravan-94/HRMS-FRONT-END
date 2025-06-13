@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import Webcam from 'react-webcam';
 import dayjs from 'dayjs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -38,7 +38,8 @@ interface AttendanceRecord {
   reason?: string;
 }
 
-const formatTime = (seconds: number) => {
+const formatTime = (seconds: number | undefined) => {
+  if (seconds === undefined) return '00:00:00';
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
   const secs = seconds % 60;
@@ -94,14 +95,13 @@ const AttendancePage: React.FC = () => {
     const savedRecord = localStorage.getItem('currentDayRecord');
     return savedRecord ? JSON.parse(savedRecord) : null;
   });
+  const [lastRecord, setLastRecord] = useState<AttendanceRecord | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [dateFilter, setDateFilter] = useState<Date>(new Date());
 
   const todayKey = dayjs().format('YYYY-MM-DD');
   const userEmail = localStorage.getItem('userEmail');
   const retrievedEmpId = localStorage.getItem('empId');
-
-  console.log('Retrieved empId from localStorage:', retrievedEmpId);
 
   // Sync states with localStorage
   useEffect(() => {
@@ -112,13 +112,23 @@ const AttendancePage: React.FC = () => {
     localStorage.setItem('loginTime', loginTime || '');
     localStorage.setItem('logoutTime', logoutTime || '');
     localStorage.setItem('currentDayRecord', JSON.stringify(currentDayRecord));
+    console.log('localStorage synced:', { isLoggedIn, loginImage, logoutImage, timeLeft, loginTime, logoutTime, currentDayRecord });
   }, [isLoggedIn, loginImage, logoutImage, timeLeft, loginTime, logoutTime, currentDayRecord]);
+
+  const saveHistoryToStorage = useCallback((history: AttendanceRecord[]) => {
+    const allHistory = JSON.parse(localStorage.getItem('allAttendanceHistory') || '[]') as AttendanceRecord[];
+    const otherUsersHistory = allHistory.filter(record => record.employee.email !== userEmail);
+    const updatedAllHistory = [...otherUsersHistory, ...history];
+    localStorage.setItem('allAttendanceHistory', JSON.stringify(updatedAllHistory));
+    console.log('Attendance history saved to localStorage:', updatedAllHistory);
+  }, [userEmail]);
 
   // Validate currentDayRecord date and sync isLoggedIn
   useEffect(() => {
     if (currentDayRecord) {
       const recordDate = dayjs(currentDayRecord.date).format('YYYY-MM-DD');
       if (recordDate !== todayKey || currentDayRecord.clockOut) {
+        console.log('currentDayRecord invalid or checked out, resetting.');
         setCurrentDayRecord(null);
         setIsLoggedIn(false);
         setLoginTime(null);
@@ -128,18 +138,26 @@ const AttendancePage: React.FC = () => {
         setTimeLeft(9 * 60 * 60);
         localStorage.removeItem('currentDayRecord');
       } else {
+        console.log('currentDayRecord valid and active.');
         setIsLoggedIn(true);
+        if (!loginImage && currentDayRecord.setCheckInImageUrl) {
+          setLoginImage(currentDayRecord.setCheckInImageUrl);
+        }
+        if (!loginTime && currentDayRecord.clockIn) {
+          setLoginTime(currentDayRecord.clockIn);
+        }
       }
-    } else {
+    } else if (!isCameraOpen && !loginImage) {
+      console.log('No currentDayRecord and not checking in, setting isLoggedIn to false.');
       setIsLoggedIn(false);
     }
-  }, [currentDayRecord, todayKey]);
+  }, [currentDayRecord, todayKey, isCameraOpen, loginImage, loginTime]);
 
   // Fetch current attendance status from API
   useEffect(() => {
     const fetchCurrentStatus = async () => {
       if (!retrievedEmpId) {
-        console.log('empId not available, skipping API call');
+        console.log('empId not available, skipping API call for current status');
         setIsLoading(false);
         return;
       }
@@ -151,15 +169,17 @@ const AttendancePage: React.FC = () => {
 
         const { isLoggedIn: apiLoggedIn, loginTime, loginImage, logoutTime, logoutImage, timeLeft, record } = response.data;
 
-        if (record && record.date === todayKey && !record.clockOut) {
+        if (record && record.date === todayKey && !record.clockOut && !isCameraOpen) {
+          console.log('API returned an active record for today.', record);
           setCurrentDayRecord(record);
           setIsLoggedIn(true);
-          setLoginTime(loginTime);
-          setLoginImage(loginImage);
+          setLoginTime(loginTime || record.clockIn);
+          setLoginImage(loginImage || record.setCheckInImageUrl);
           setLogoutTime(logoutTime);
           setLogoutImage(logoutImage);
-          setTimeLeft(timeLeft);
-        } else {
+          setTimeLeft(timeLeft || 9 * 60 * 60);
+        } else if (!isCameraOpen && !currentDayRecord) {
+          console.log(`API returned no active record for today or it's already checked out.`);
           setCurrentDayRecord(null);
           setIsLoggedIn(false);
           setLoginTime(null);
@@ -170,9 +190,29 @@ const AttendancePage: React.FC = () => {
         }
       } catch (error) {
         console.error('Error fetching current status:', error);
-        if (currentDayRecord && isLoggedIn && dayjs(currentDayRecord.date).format('YYYY-MM-DD') === todayKey && !currentDayRecord.clockOut) {
-          console.log('API failed, using localStorage state to maintain login');
+        if (currentDayRecord && isLoggedIn && dayjs(currentDayRecord.date).format('YYYY-MM-DD') === todayKey && !currentDayRecord.clockOut && !isCameraOpen) {
+          console.log('API failed but localStorage state is consistent, maintaining login.');
+        } else if (loginImage && isLoggedIn && !isCameraOpen) {
+          console.log('API failed but loginImage exists, attempting to recover record.');
+          // Attempt to recover by checking history
+          const todayRecord = attendanceHistory.find(record => 
+            record.date === todayKey && record.clockIn && !record.clockOut
+          );
+          if (todayRecord) {
+            setCurrentDayRecord(todayRecord);
+            setLoginTime(todayRecord.clockIn);
+            setLoginImage(todayRecord.setCheckInImageUrl);
+          } else {
+            setIsLoggedIn(false);
+            setLoginTime(null);
+            setLoginImage(null);
+            setLogoutTime(null);
+            setLogoutImage(null);
+            setTimeLeft(9 * 60 * 60);
+            setCurrentDayRecord(null);
+          }
         } else {
+          console.log('API failed, resetting login state.');
           setIsLoggedIn(false);
           setLoginTime(null);
           setLoginImage(null);
@@ -187,171 +227,207 @@ const AttendancePage: React.FC = () => {
     };
 
     fetchCurrentStatus();
-  }, [retrievedEmpId, todayKey]);
+  }, [retrievedEmpId, todayKey, isCameraOpen, attendanceHistory, currentDayRecord, isLoggedIn, loginImage]);
 
   // Fetch attendance history from API
-  useEffect(() => {
-    const fetchAttendanceHistory = async () => {
-      if (!retrievedEmpId) {
-        console.log('empId not available, skipping API call');
-        return;
+  const fetchAttendanceHistory = useCallback(async () => {
+    if (!retrievedEmpId) {
+      console.log('empId not available, skipping API call for history');
+      return;
+    }
+
+    try {
+      console.log(`Fetching attendance history for empId: ${retrievedEmpId}`);
+      const response = await axios.get(`${base_url}/api/attendance/employee/${retrievedEmpId}?t=${Date.now()}`);
+      console.log('Raw attendance history API response:', response.data);
+
+      if (!Array.isArray(response.data)) {
+        console.error('API response is not an array:', response.data);
+        throw new Error('API response for history is not an array');
       }
 
-      try {
-        console.log(`Fetching attendance history for empId: ${retrievedEmpId}`);
-        const response = await axios.get(`${base_url}/api/attendance/employee/${retrievedEmpId}?t=${Date.now()}`);
-        console.log('Attendance history API response:', response.data);
-
-        if (!Array.isArray(response.data)) {
-          throw new Error('API response is not an array');
-        }
-
-        const history: AttendanceRecord[] = response.data.map((record: any, index: number) => {
-          console.log(`Mapping record #${index + 1}:`, record);
-          return {
-            id: record.id,
-            date: record.date ? dayjs(record.date).format('YYYY-MM-DD') : dayjs().format('YYYY-MM-DD'),
-            clockIn: record.clockIn ? record.clockIn : null,
-            clockOut: record.clockOut ? record.clockOut : null,
-            status: record.status || 'Unknown',
-            location: record.location || 'Unknown',
-            setCheckInImageUrl: record.setCheckInImageUrl || null,
-            setCheckOutImageUrl: record.setCheckOutImageUrl || null,
-            employee: {
-              empId: record.employee?.empId || parseInt(retrievedEmpId || '1'),
-              ename: record.employee?.ename || '',
-              email: record.employee?.email || userEmail || ''
-            },
-            duration: record.clockIn && record.clockOut 
-              ? dayjs(record.clockOut).diff(dayjs(record.clockIn), 'second')
-              : null
-          };
-        });
-
-        console.log('Mapped history:', history);
+      const history: AttendanceRecord[] = response.data.map((record: any, index: number) => {
+        console.log(`Processing record #${index + 1}:`, record);
         
-        // Sort attendance history by date/clockIn descending (latest first)
-        history.sort((a, b) => {
-          const aTime = a.clockIn ? dayjs(a.clockIn) : dayjs(a.date);
-          const bTime = b.clockIn ? dayjs(b.clockIn) : dayjs(b.date);
-          return bTime.valueOf() - aTime.valueOf(); // Latest first
-        });
-        
-        setAttendanceHistory(history);
-      } catch (error: any) {
-        console.error('Error fetching attendance history:', error);
-        toast({
-          title: "Error",
-          description: error.message || "Failed to fetch attendance history",
-          variant: "destructive",
-        });
-      }
-    };
-
-    fetchAttendanceHistory();
-  }, [retrievedEmpId]);
-
-  useEffect(() => {
-    let timer: NodeJS.Timeout;
-    if (isLoggedIn && timeLeft > 0) {
-      timer = setInterval(() => {
-        setTimeLeft((prev) => {
-          if (prev <= 0) {
-            clearInterval(timer);
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    } else if (timeLeft === 0 && isLoggedIn) {
-      clearInterval(timer);
-    }
-    return () => clearInterval(timer);
-  }, [isLoggedIn, timeLeft]);
-
-  const saveHistoryToStorage = (history: AttendanceRecord[]) => {
-    const allHistory = JSON.parse(localStorage.getItem('attendanceHistory') || '[]') as AttendanceRecord[];
-    const otherUsersHistory = allHistory.filter(record => record.employee.email !== userEmail);
-    const updatedAllHistory = [...otherUsersHistory, ...history];
-    localStorage.setItem('attendanceHistory', JSON.stringify(updatedAllHistory));
-  };
-
-  const handleLogin = () => {
-    if (!isLoggedIn) {
-      setActionType('login');
-      setIsCameraOpen(true);
-    }
-  };
-
-  const handleLogout = async () => {
-    if (isLoggedIn) {
-      if (!currentDayRecord?.id) {
-        try {
-          const response = await axios.get(`${base_url}/api/attendance/current-status/${retrievedEmpId}`);
-          const { record } = response.data;
-          if (record && record.date === todayKey && !record.clockOut) {
-            setCurrentDayRecord(record);
-          } else {
-            throw new Error('No check-in record found');
-          }
-        } catch (error) {
-          console.error('Error re-fetching current status for logout:', error);
-          if (currentDayRecord && dayjs(currentDayRecord.date).format('YYYY-MM-DD') === todayKey && !currentDayRecord.clockOut) {
-            console.log('Using localStorage state for logout');
-          } else {
-            toast({
-              title: "Error",
-              description: "No check-in record found for today. Please check-in first.",
-              variant: "destructive",
-            });
-            setIsLoggedIn(false);
-            localStorage.setItem('isLoggedIn', 'false');
-            setCurrentDayRecord(null);
-            return;
-          }
-        }
-      }
-      setActionType('logout');
-      setIsCameraOpen(true);
-    }
-  };
-
-  const capture = () => {
-    if (!webcamRef.current) return;
-    const imageSrc = webcamRef.current.getScreenshot();
-    if (!imageSrc) return;
-
-    const now = dayjs();
-    setIsLoading(true);
-
-    const base64Image = imageSrc.split(',')[1];
-
-    const refreshHistory = async () => {
-      try {
-        const response = await axios.get(`${base_url}/api/attendance/employee/${retrievedEmpId}?t=${Date.now()}`);
-        const updatedHistory: AttendanceRecord[] = response.data.map((record: any) => ({
+        const processedRecord = {
           id: record.id,
           date: record.date ? dayjs(record.date).format('YYYY-MM-DD') : dayjs().format('YYYY-MM-DD'),
           clockIn: record.clockIn ? record.clockIn : null,
           clockOut: record.clockOut ? record.clockOut : null,
           status: record.status || 'Unknown',
           location: record.location || 'Unknown',
-          setCheckInImageUrl: record.setCheckInImageUrl || null,
-          setCheckOutImageUrl: record.setCheckOutImageUrl || null,
+          setCheckInImageUrl: record.checkInImageUrl || record.setCheckInImageUrl || record.checkInImage || null,
+          setCheckOutImageUrl: record.checkOutImageUrl || record.setCheckOutImageUrl || record.checkOutImage || null,
           employee: {
             empId: record.employee?.empId || parseInt(retrievedEmpId || '1'),
             ename: record.employee?.ename || '',
             email: record.employee?.email || userEmail || ''
           },
-          duration: record.clockIn && record.clockOut
+          duration: record.clockIn && record.clockOut 
             ? dayjs(record.clockOut).diff(dayjs(record.clockIn), 'second')
             : null
-        }));
-        setAttendanceHistory(updatedHistory);
-      } catch (error) {
-        console.error('Error refreshing attendance history:', error);
+        };
+        
+        console.log(`Processed record #${index + 1}:`, processedRecord);
+        return processedRecord;
+      });
+
+      console.log('Final processed history:', history);
+      
+      history.sort((a, b) => {
+        const dateComparison = dayjs(b.date).valueOf() - dayjs(a.date).valueOf();
+        if (dateComparison !== 0) return dateComparison;
+        
+        const aTime = a.clockIn ? dayjs(a.clockIn) : dayjs(a.date);
+        const bTime = b.clockIn ? dayjs(b.clockIn) : dayjs(b.date);
+        return bTime.valueOf() - aTime.valueOf();
+      });
+      
+      setAttendanceHistory(history);
+      saveHistoryToStorage(history);
+
+      // Check if there's an active record for today in history
+      const todayRecord = history.find(record => 
+        record.date === todayKey && record.clockIn && !record.clockOut
+      );
+      if (todayRecord && !currentDayRecord && isLoggedIn && loginImage) {
+        console.log('Recovered today record from history:', todayRecord);
+        setCurrentDayRecord(todayRecord);
+        setLoginTime(todayRecord.clockIn);
+        setLoginImage(todayRecord.setCheckInImageUrl);
       }
+    } catch (error: any) {
+      console.error('Error fetching attendance history:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to fetch attendance history",
+        variant: "destructive",
+      });
+    }
+  }, [retrievedEmpId, userEmail, saveHistoryToStorage, todayKey, currentDayRecord, isLoggedIn, loginImage]);
+
+  useEffect(() => {
+    fetchAttendanceHistory();
+  }, [fetchAttendanceHistory]);
+
+  // Timer logic
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    if (isLoggedIn && timeLeft > 0) {
+      console.log('Starting timer with timeLeft:', timeLeft);
+      timer = setInterval(() => {
+        setTimeLeft((prev) => {
+          if (prev <= 0) {
+            console.log('Timer reached zero, clearing interval.');
+            clearInterval(timer);
+            return 0;
+          }
+          console.log('Timer tick, timeLeft:', prev - 1);
+          return prev - 1;
+        });
+      }, 1000);
+    } else if (timeLeft === 0 && isLoggedIn) {
+      console.log('Timer reached zero while logged in, clearing interval.');
+      clearInterval(timer);
+    }
+    return () => {
+      console.log('Cleaning up timer.');
+      clearInterval(timer);
     };
+  }, [isLoggedIn, timeLeft]);
+
+  const handleLogin = () => {
+    if (!isLoggedIn) {
+      setActionType('login');
+      setIsCameraOpen(true);
+      console.log('Initiating check-in process.');
+    } else {
+      toast({
+        title: "Info",
+        description: "You are already checked in.",
+        variant: "default",
+      });
+    }
+  };
+
+  const handleLogout = async () => {
+    if (isLoggedIn || loginImage) { // Allow logout attempt if loginImage exists
+      if (!currentDayRecord?.id) {
+        console.log('No currentDayRecord ID, attempting to recover or fetch.');
+        try {
+          const response = await axios.get(`${base_url}/api/attendance/current-status/${retrievedEmpId}`);
+          const { record } = response.data;
+          if (record && record.date === todayKey && !record.clockOut) {
+            setCurrentDayRecord(record);
+            console.log('Re-fetched active record for logout:', record);
+            setLoginTime(record.clockIn);
+            setLoginImage(record.setCheckInImageUrl);
+          } else {
+            // Check history as a fallback
+            const todayRecord = attendanceHistory.find(record => 
+              record.date === todayKey && record.clockIn && !record.clockOut
+            );
+            if (todayRecord) {
+              setCurrentDayRecord(todayRecord);
+              console.log('Recovered record from history for logout:', todayRecord);
+              setLoginTime(todayRecord.clockIn);
+              setLoginImage(todayRecord.setCheckInImageUrl);
+            } else {
+              throw new Error('No active check-in record found for today.');
+            }
+          }
+        } catch (error) {
+          console.error('Error re-fetching current status for logout:', error);
+          toast({
+            title: "Error",
+            description: "No check-in record found for today. Please check-in first.",
+            variant: "destructive",
+          });
+          setIsLoggedIn(false);
+          localStorage.setItem('isLoggedIn', 'false');
+          setCurrentDayRecord(null);
+          setLoginTime(null);
+          setLoginImage(null);
+          return;
+        }
+      }
+      setActionType('logout');
+      setIsCameraOpen(true);
+      console.log('Initiating check-out process.');
+    } else {
+      toast({
+        title: "Info",
+        description: "You are not currently checked in.",
+        variant: "default",
+      });
+    }
+  };
+
+  const capture = useCallback(async () => {
+    if (!webcamRef.current) {
+      console.error('Webcam ref is null');
+      toast({
+        title: "Error",
+        description: "Webcam is not available. Please try again.",
+        variant: "destructive",
+      });
+      return;
+    }
+    const imageSrc = webcamRef.current.getScreenshot();
+    if (!imageSrc) {
+      console.error('No image captured');
+      toast({
+        title: "Error",
+        description: "Failed to capture image. Please try again.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const now = dayjs();
+    setIsLoading(true);
+
+    const base64Image = imageSrc.split(',')[1];
 
     if (actionType === 'login') {
       const formData = new FormData();
@@ -361,12 +437,12 @@ const AttendancePage: React.FC = () => {
       console.log('File being sent for check-in:', file);
       formData.append('file', file);
 
-      axios.post(`${base_url}/api/attendance/checkin`, formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data'
-        }
-      })
-      .then(async response => {
+      try {
+        const response = await axios.post(`${base_url}/api/attendance/checkin`, formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data'
+          }
+        });
         console.log('Check-in API Response:', response.data);
         
         const displayImage = `data:image/jpeg;base64,${base64Image}`;
@@ -385,46 +461,71 @@ const AttendancePage: React.FC = () => {
             ename: '',
             email: userEmail || ''
           },
-          duration: undefined
+          duration: null
         };
 
-        setAttendanceHistory(prev => [...prev, newRecord]);
+        setAttendanceHistory(prev => {
+          const updatedHistory = [...prev, newRecord];
+          updatedHistory.sort((a, b) => {
+            const aTime = a.clockIn ? dayjs(a.clockIn) : dayjs(a.date);
+            const bTime = b.clockIn ? dayjs(b.clockIn) : dayjs(b.date);
+            return bTime.valueOf() - aTime.valueOf();
+          });
+          saveHistoryToStorage(updatedHistory);
+          console.log('Attendance history after check-in:', updatedHistory);
+          return updatedHistory;
+        });
         setCurrentDayRecord(newRecord);
-
         setIsLoggedIn(true);
         setLoginImage(displayImage);
         setLoginTime(newRecord.clockIn);
         setTimeLeft(9 * 60 * 60);
 
-        await refreshHistory();
-
         toast({
           title: "Success",
           description: "Check-in recorded successfully!",
         });
-      })
-      .catch(error => {
+
+        console.log('State after successful check-in:', {
+          isLoggedIn: true,
+          loginImage: displayImage,
+          loginTime: newRecord.clockIn,
+          timeLeft: 9 * 60 * 60,
+          currentDayRecord: newRecord,
+        });
+      } catch (error: any) {
         console.error('Check-in API Error:', error);
         toast({
           title: "Error",
           description: error.response?.data?.message || "Failed to record check-in. Please try again.",
           variant: "destructive"
         });
-      })
-      .finally(() => {
-        setIsLoading(false);
-      });
-    } else if (actionType === 'logout') {
-      if (!currentDayRecord?.id) {
-        toast({
-          title: "Error",
-          description: "No check-in record found for today. Please check-in first.",
-          variant: "destructive"
-        });
+      } finally {
         setIsLoading(false);
         setIsCameraOpen(false);
         setActionType(null);
-        return;
+        await fetchAttendanceHistory();
+      }
+    } else if (actionType === 'logout') {
+      if (!currentDayRecord?.id) {
+        console.error('No currentDayRecord ID for check-out, attempting recovery.');
+        const todayRecord = attendanceHistory.find(record => 
+          record.date === todayKey && record.clockIn && !record.clockOut
+        );
+        if (todayRecord) {
+          setCurrentDayRecord(todayRecord);
+          console.log('Recovered record for check-out:', todayRecord);
+        } else {
+          toast({
+            title: "Error",
+            description: "No check-in record found for today. Please check-in first.",
+            variant: "destructive"
+          });
+          setIsLoading(false);
+          setIsCameraOpen(false);
+          setActionType(null);
+          return;
+        }
       }
 
       const formData = new FormData();
@@ -432,79 +533,78 @@ const AttendancePage: React.FC = () => {
       console.log('File being sent for check-out:', file);
       formData.append('file', file);
 
-      axios.post(`${base_url}/api/attendance/checkout/${currentDayRecord.id}`, formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data'
-        }
-      })
-      .then(async response => {
+      try {
+        const response = await axios.post(`${base_url}/api/attendance/checkout/${currentDayRecord.id}`, formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data'
+          }
+        });
         console.log('Check-out API Response:', response.data);
 
-        const loginTimeObj = dayjs(loginTime);
+        const loginTimeObj = dayjs(currentDayRecord.clockIn);
         const logoutTimeObj = now;
         const calculatedDuration = loginTimeObj.isValid() && logoutTimeObj.isValid()
           ? logoutTimeObj.diff(loginTimeObj, 'second')
           : 0;
 
         const displayImage = `data:image/jpeg;base64,${base64Image}`;
+        console.log('Check-out display image:', displayImage);
 
         const finalUpdatedRecord: AttendanceRecord = {
           ...currentDayRecord,
           clockOut: logoutTimeObj.format(),
           setCheckOutImageUrl: displayImage,
           duration: calculatedDuration,
-          clockIn: currentDayRecord.clockIn,
-          setCheckInImageUrl: currentDayRecord.setCheckInImageUrl,
-          date: currentDayRecord.date,
-          id: currentDayRecord.id,
-          employee: currentDayRecord.employee,
-          location: currentDayRecord.location,
-          status: currentDayRecord.status,
-          reason: currentDayRecord.reason
         };
+        console.log('Final Updated Record on Logout:', finalUpdatedRecord);
 
-        setAttendanceHistory(prev =>
-          prev.map(record =>
+        setAttendanceHistory(prev => {
+          const updatedHistory = prev.map(record =>
             record.id === currentDayRecord.id ? finalUpdatedRecord : record
-          )
-        );
+          );
+          updatedHistory.sort((a, b) => {
+            const dateComparison = dayjs(b.date).valueOf() - dayjs(a.date).valueOf();
+            if (dateComparison !== 0) return dateComparison;
+            const aTime = a.clockIn ? dayjs(a.clockIn) : dayjs(a.date);
+            const bTime = b.clockIn ? dayjs(b.clockIn) : dayjs(b.date);
+            return bTime.valueOf() - aTime.valueOf();
+          });
+          saveHistoryToStorage(updatedHistory);
+          console.log('Attendance history after check-out:', updatedHistory);
+          return updatedHistory;
+        });
 
-        setCurrentDayRecord(finalUpdatedRecord);
+        setLastRecord(finalUpdatedRecord);
+        setCurrentDayRecord(null);
         setHoursWorked(calculatedDuration);
         setLogoutTime(finalUpdatedRecord.clockOut);
-
+        setLogoutImage(displayImage);
         setIsLoggedIn(false);
         setLoginImage(null);
         setLoginTime(null);
         setTimeLeft(9 * 60 * 60);
-        setLogoutImage(displayImage);
         localStorage.removeItem('currentDayRecord');
-
-        await refreshHistory();
-
         setShowLogoutSummary(true);
 
         toast({
           title: "Success",
           description: "Check-out recorded successfully!",
         });
-      })
-      .catch(error => {
+      } catch (error: any) {
         console.error('Check-out API Error:', error);
         toast({
           title: "Error",
           description: error.response?.data?.message || "Failed to record check-out. Please try again.",
           variant: "destructive"
         });
-      })
-      .finally(() => {
+      } finally {
         setIsLoading(false);
-      });
+        setIsCameraOpen(false);
+        setActionType(null);
+        await fetchAttendanceHistory();
+      }
     }
-
-    setIsCameraOpen(false);
-    setActionType(null);
-  };
+  }, [actionType, currentDayRecord, retrievedEmpId, userEmail, saveHistoryToStorage, todayKey, fetchAttendanceHistory, attendanceHistory]);
 
   const dataURLtoFile = (dataurl: string, filename: string) => {
     const arr = dataurl.split(',');
@@ -518,24 +618,80 @@ const AttendancePage: React.FC = () => {
     return new File([u8arr], filename, { type: mime });
   };
 
-  const historicalRecords = attendanceHistory
-    .map(record => ({
-      ...record,
-      duration: record.clockIn && record.clockOut 
-        ? dayjs(record.clockOut).diff(dayjs(record.clockIn), 'second')
-        : 0
-    }))
-    .sort((a, b) => dayjs(b.date).valueOf() - dayjs(a.date).valueOf());
-
-  console.log('Filtered historical records:', historicalRecords);
-
-  // Filter function for attendance records
   const getFilteredAttendance = () => {
-    return attendanceHistory.filter(record => {
-      const recordDate = dayjs(record.date).format('YYYY-MM-DD');
-      const filterDate = dayjs(dateFilter).format('YYYY-MM-DD');
-      return recordDate === filterDate;
-    });
+    console.log('Filtering attendance history for date:', dateFilter, 'Current history:', attendanceHistory);
+    return attendanceHistory
+      .filter(record => {
+        const recordDate = dayjs(record.date).format('YYYY-MM-DD');
+        const filterDate = dayjs(dateFilter).format('YYYY-MM-DD');
+        const isMatch = recordDate === filterDate;
+        console.log(`Record date: ${recordDate}, Filter date: ${filterDate}, Match: ${isMatch}, Record ID: ${record.id}`);
+        return isMatch;
+      })
+      .sort((a, b) => {
+        const aTime = a.clockIn ? dayjs(a.clockIn) : dayjs(a.date);
+        const bTime = b.clockIn ? dayjs(b.clockIn) : dayjs(b.date);
+        return bTime.valueOf() - aTime.valueOf();
+      });
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status.toLowerCase()) {
+      case 'present':
+        return 'bg-green-100 text-green-800';
+      case 'absent':
+        return 'bg-red-100 text-red-800';
+      case 'late':
+        return 'bg-yellow-100 text-yellow-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const calculateDuration = (clockIn: string | null, clockOut: string | null) => {
+    if (!clockIn || !clockOut) return null;
+    const start = dayjs(clockIn);
+    const end = dayjs(clockOut);
+    if (!start.isValid() || !end.isValid()) return null;
+    return end.diff(start, 'second');
+  };
+
+  const getImageUrl = (imageUrl: string | null) => {
+    if (!imageUrl) {
+      console.log('No image URL provided');
+      return null;
+    }
+
+    try {
+      if (imageUrl.startsWith('data:image')) {
+        console.log('Image URL is base64');
+        return imageUrl;
+      }
+
+      if (imageUrl.startsWith('/')) {
+        const fullUrl = `${base_url}${imageUrl}`;
+        console.log('Relative image URL converted to:', fullUrl);
+        return fullUrl;
+      }
+
+      if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
+        console.log('Image URL is already a full URL:', imageUrl);
+        return imageUrl;
+      }
+
+      if (imageUrl.match(/^[A-Za-z0-9+/=]+$/)) {
+        const fullBase64 = `data:image/jpeg;base64,${imageUrl}`;
+        console.log('Converted raw base64 to data URL');
+        return fullBase64;
+      }
+
+      const fullUrl = `${base_url}/${imageUrl}`;
+      console.log('Assuming relative path, converted to:', fullUrl);
+      return fullUrl;
+    } catch (error) {
+      console.error('Error processing image URL:', error);
+      return null;
+    }
   };
 
   return (
@@ -610,12 +766,12 @@ const AttendancePage: React.FC = () => {
                   </div>
                   <Button
                     className={`px-6 py-2 rounded-lg font-medium transition-colors duration-200 ${
-                      !isLoggedIn
+                      !isLoggedIn && !loginImage
                         ? 'bg-gray-300 cursor-not-allowed'
                         : 'bg-red-600 hover:bg-red-700 text-white'
                     }`}
                     onClick={handleLogout}
-                    disabled={!isLoggedIn}
+                    disabled={!isLoggedIn && !loginImage}
                   >
                     Log Out
                   </Button>
@@ -633,11 +789,12 @@ const AttendancePage: React.FC = () => {
                 {loginImage ? (
                   <div className="space-y-4">
                     <img
-                      src={loginImage}
+                      src={getImageUrl(loginImage) || ''}
                       alt="login-selfie-image"
                       className="w-40 h-40 mx-auto rounded-full object-cover shadow-lg"
                       onError={(e) => {
-                        console.error('Error loading login image');
+                        console.error('Error loading login image:', e);
+                        e.currentTarget.src = '';
                       }}
                     />
                     {loginTime && (
@@ -662,11 +819,11 @@ const AttendancePage: React.FC = () => {
                 {logoutImage ? (
                   <div className="space-y-4">
                     <img
-                      src={logoutImage}
+                      src={getImageUrl(logoutImage) || ''}
                       alt="Logout Selfie"
                       className="w-40 h-40 mx-auto rounded-full object-cover shadow-lg"
                       onError={(e) => {
-                        console.error('Error loading logout image');
+                        console.error('Error loading logout image:', e);
                         e.currentTarget.src = '';
                       }}
                     />
@@ -720,7 +877,6 @@ const AttendancePage: React.FC = () => {
                     variant="outline"
                     onClick={() => {
                       setDateFilter(new Date());
-                      // Reset any other filters if they exist
                     }}
                   >
                     Clear Filters
@@ -731,71 +887,90 @@ const AttendancePage: React.FC = () => {
             <CardContent>
               {getFilteredAttendance().length > 0 ? (
                 <div className="space-y-6">
-                  {getFilteredAttendance().map((record) => (
-                    <div key={record.id} className="flex flex-col p-4 border rounded-lg shadow-sm">
-                      <div className="flex justify-between items-center mb-4">
-                        <span className="text-lg font-semibold text-gray-800">
-                          {dayjs(record.date).format('MMM DD, YYYY')}
-                        </span>
-                        <Badge variant="outline" className="text-blue-600">
-                          {formatDuration(record.duration || 0)}
-                        </Badge>
-                      </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                          <p className="text-sm font-medium text-gray-600 mb-2">Check In</p>
-                          {record.setCheckInImageUrl ? (
-                            <img
-                              src={record.setCheckInImageUrl}
-                              alt={`Check-in Selfie ${record.date}`}
-                              className="w-32 h-32 mx-auto rounded-lg object-cover shadow-md"
-                              onError={(e) => {
-                                console.error('Error loading check-in image');
-                                e.currentTarget.src = '';
-                              }}
-                            />
-                          ) : (
-                            <div className="w-32 h-32 mx-auto rounded-lg bg-gray-100 flex items-center justify-center text-gray-400">
-                              No Image Available
-                            </div>
-                          )}
-                          {record.clockIn && (
-                            <p className="text-center text-sm text-gray-600 mt-2">
-                              {formatDateTime(record.clockIn)}
-                            </p>
-                          )}
+                  {getFilteredAttendance().map((record) => {
+                    const duration = calculateDuration(record.clockIn, record.clockOut);
+                    const checkInImageUrl = getImageUrl(record.setCheckInImageUrl);
+                    const checkOutImageUrl = getImageUrl(record.setCheckOutImageUrl);
+                    console.log(`Rendering record ${record.id}:`, {
+                      checkInImageUrl,
+                      checkOutImageUrl,
+                      record
+                    });
+                    
+                    return (
+                      <div key={record.id} className="flex flex-col p-4 border rounded-lg shadow-sm">
+                        <div className="flex justify-between items-center mb-4">
+                          <span className="text-lg font-semibold text-gray-800">
+                            {dayjs(record.date).format('MMM DD, YYYY')}
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline" className="text-blue-600">
+                              {duration ? formatDuration(duration) : '--'}
+                            </Badge>
+                            <Badge className={getStatusColor(record.status)}>
+                              {record.status}
+                            </Badge>
+                          </div>
                         </div>
-                        <div>
-                          <p className="text-sm font-medium text-gray-600 mb-2">Check Out</p>
-                          {record.setCheckOutImageUrl ? (
-                            <img
-                              src={record.setCheckOutImageUrl}
-                              alt={`Check-out Selfie ${record.date}`}
-                              className="w-32 h-32 mx-auto rounded-lg object-cover shadow-md"
-                              onError={(e) => {
-                                console.error('Error loading check-out image');
-                                e.currentTarget.src = '';
-                              }}
-                            />
-                          ) : (
-                            <div className="w-32 h-32 mx-auto rounded-lg bg-gray-100 flex items-center justify-center text-gray-400">
-                              No Image Available
-                            </div>
-                          )}
-                          {record.clockOut && (
-                            <p className="text-center text-sm text-gray-600 mt-2">
-                              {formatDateTime(record.clockOut)}
-                            </p>
-                          )}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <p className="text-sm text-gray-600">Check In</p>
+                            <p className="font-medium">{record.clockIn ? formatDateTime(record.clockIn) : '--'}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-600">Check Out</p>
+                            <p className="font-medium">{record.clockOut ? formatDateTime(record.clockOut) : '--'}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-600">Location</p>
+                            <p className="font-medium">{record.location || '--'}</p>
+                          </div>
+                        </div>
+                        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <p className="text-sm text-gray-600 mb-2">Check-in Image</p>
+                            {checkInImageUrl ? (
+                              <img
+                                src={checkInImageUrl}
+                                alt="Check-in"
+                                className="w-32 h-32 object-cover rounded-lg"
+                                onError={(e) => {
+                                  console.error('Error loading check-in image:', e);
+                                  e.currentTarget.src = '';
+                                }}
+                              />
+                            ) : (
+                              <div className="w-32 h-32 bg-gray-100 rounded-lg flex items-center justify-center text-gray-400">
+                                No Image
+                              </div>
+                            )}
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-600 mb-2">Check-out Image</p>
+                            {checkOutImageUrl ? (
+                              <img
+                                src={checkOutImageUrl}
+                                alt="Check-out"
+                                className="w-32 h-32 object-cover rounded-lg"
+                                onError={(e) => {
+                                  console.error('Error loading check-out image:', e);
+                                  e.currentTarget.src = '';
+                                }}
+                              />
+                            ) : (
+                              <div className="w-32 h-32 bg-gray-100 rounded-lg flex items-center justify-center text-gray-400">
+                                No Image
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               ) : (
                 <div className="text-center py-8">
-                  <p className="text-gray-500">No attendance records found for {format(dateFilter, "MMMM dd, yyyy")}.</p>
-                  <p className="text-sm text-gray-400 mt-2">Your attendance history will appear here after you log in and out.</p>
+                  <p className="text-gray-500">No attendance records found for {format(dateFilter, 'PPP')}.</p>
                 </div>
               )}
             </CardContent>
@@ -804,38 +979,38 @@ const AttendancePage: React.FC = () => {
       )}
 
       {isCameraOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-[90%] max-w-md space-y-4">
-            <h2 className="text-xl font-semibold text-center text-gray-800">
-              Take Your {actionType === 'login' ? 'Check-in' : 'Check-out'} Selfie
-            </h2>
-            <Webcam
-              ref={webcamRef}
-              screenshotFormat="image/jpeg"
-              className="rounded-lg w-full"
-              videoConstraints={{ width: 640, height: 480, facingMode: 'user' }}
-            />
-            <div className="flex justify-between pt-4">
+        <Dialog open={isCameraOpen} onOpenChange={setIsCameraOpen}>
+          <DialogContent className="sm:max-w-[425px]">
+            <DialogHeader>
+              <DialogTitle>{actionType === 'login' ? 'Check-in' : 'Check-out'} Selfie</DialogTitle>
+              <DialogDescription>
+                Please take a selfie to {actionType === 'login' ? 'check-in' : 'check-out'}.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="relative w-full aspect-video">
+              <Webcam
+                audio={false}
+                ref={webcamRef}
+                screenshotFormat="image/jpeg"
+                className="w-full h-full object-cover rounded-md"
+              />
+            </div>
+            <div className="flex justify-end gap-2">
               <Button
-                onClick={capture}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium transition-colors duration-200"
-                disabled={isLoading}
-              >
-                {isLoading ? 'Processing...' : 'Capture'}
-              </Button>
-              <Button
+                variant="outline"
                 onClick={() => {
                   setIsCameraOpen(false);
                   setActionType(null);
                 }}
-                className="text-gray-600 hover:text-gray-800 font-medium transition-colors duration-200"
-                disabled={isLoading}
               >
                 Cancel
               </Button>
+              <Button onClick={capture} disabled={isLoading}>
+                {isLoading ? 'Processing...' : 'Capture Photo'}
+              </Button>
             </div>
-          </div>
-        </div>
+          </DialogContent>
+        </Dialog>
       )}
 
       <Dialog open={showLogoutSummary} onOpenChange={setShowLogoutSummary}>
@@ -851,21 +1026,19 @@ const AttendancePage: React.FC = () => {
               <div>
                 <p className="text-sm text-gray-600">Total Hours Worked</p>
                 <p className="text-3xl font-bold text-blue-600">
-                  {currentDayRecord?.duration !== undefined && currentDayRecord.duration >= 0 
-                    ? formatDuration(currentDayRecord.duration)
-                    : '--'}
+                  {hoursWorked ? formatDuration(hoursWorked) : '--'}
                 </p>
               </div>
               <div className="space-y-2">
                 <p className="text-sm text-gray-600">Check-in Time</p>
                 <p className="text-sm font-medium">
-                  {currentDayRecord?.clockIn ? formatDateTime(currentDayRecord.clockIn) : '--'}
+                  {lastRecord?.clockIn ? formatDateTime(lastRecord.clockIn) : '--'}
                 </p>
               </div>
               <div className="space-y-2">
                 <p className="text-sm text-gray-600">Check-out Time</p>
                 <p className="text-sm font-medium">
-                  {currentDayRecord?.clockOut ? formatDateTime(currentDayRecord.clockOut) : '--'}
+                  {lastRecord?.clockOut ? formatDateTime(lastRecord.clockOut) : '--'}
                 </p>
               </div>
             </div>
